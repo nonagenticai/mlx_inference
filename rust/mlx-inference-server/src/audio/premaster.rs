@@ -408,17 +408,53 @@ struct TempDir {
 }
 
 impl TempDir {
+    /// Create a private directory whose name an attacker cannot pre-create.
+    ///
+    /// `create_dir` (not `create_dir_all`) fails when the path exists, so even a
+    /// guessed name cannot be turned into a symlink that redirects the clip we
+    /// write; the random suffix from the OS is what makes guessing infeasible in
+    /// the first place. Mode 0700 keeps other local users out of the pair.
     fn new() -> Result<Self, String> {
         static COUNTER: AtomicU64 = AtomicU64::new(0);
-        let unique = format!(
-            "mlx-inference-premaster-{}-{}",
-            std::process::id(),
-            COUNTER.fetch_add(1, Ordering::Relaxed)
-        );
-        let path = std::env::temp_dir().join(unique);
-        fs::create_dir_all(&path).map_err(|err| format!("creating the premaster dir: {err}"))?;
-        Ok(Self { path })
+        let base = std::env::temp_dir();
+        for _ in 0..8 {
+            let unique = format!(
+                "mlx-inference-premaster-{}-{:016x}-{}",
+                std::process::id(),
+                random_u64()?,
+                COUNTER.fetch_add(1, Ordering::Relaxed)
+            );
+            let path = base.join(unique);
+            match fs::create_dir(&path) {
+                Ok(()) => {
+                    #[cfg(unix)]
+                    {
+                        use std::os::unix::fs::PermissionsExt;
+                        if let Ok(metadata) = fs::metadata(&path) {
+                            let mut permissions = metadata.permissions();
+                            permissions.set_mode(0o700);
+                            let _ = fs::set_permissions(&path, permissions);
+                        }
+                    }
+                    return Ok(Self { path });
+                }
+                Err(err) if err.kind() == io::ErrorKind::AlreadyExists => continue,
+                Err(err) => return Err(format!("creating the premaster dir: {err}")),
+            }
+        }
+        Err("could not create a private premaster directory".to_owned())
     }
+}
+
+/// 64 random bits from the OS. `/dev/urandom` is present on every host this runs
+/// on, and this is not a cryptographic key — it only has to be unguessable.
+fn random_u64() -> Result<u64, String> {
+    use std::io::Read;
+    let mut bytes = [0u8; 8];
+    fs::File::open("/dev/urandom")
+        .and_then(|mut file| file.read_exact(&mut bytes))
+        .map_err(|err| format!("reading /dev/urandom: {err}"))?;
+    Ok(u64::from_le_bytes(bytes))
 }
 
 impl Drop for TempDir {
@@ -542,5 +578,66 @@ mod tests {
             "lufs {lufs} not within 0.5 LU of the target"
         );
         assert!(mastered.true_peak.unwrap() <= TRUE_PEAK_DBTP + 0.1);
+    }
+
+    /// The other half of the premaster: a clip whose linear gain would push the
+    /// peaks past the ceiling must go through the 192 kHz headroom limiter.
+    ///
+    /// Without this test the limiter branch is only ever checked as a filter
+    /// string, so deleting it would leave every test green. A low-level tone with
+    /// periodic full-scale clicks has the crest factor that forces the branch.
+    #[test]
+    #[ignore = "needs ffmpeg and a real clip; run on the host before a cutover"]
+    fn premaster_limits_a_high_crest_clip_to_the_ceiling() {
+        let ffmpeg = find_on_path("ffmpeg").expect("ffmpeg on PATH");
+        let sample_rate = 24_000u32;
+        // −20 dBFS tone with full-scale clicks: a +2 dB linear gain would take the
+        // clicks to +1.5 dBTP, so pass 2 has to limit them to −3.8 dBTP first.
+        let quiet = 10f64.powf(-20.0 / 20.0) * f64::from(i16::MAX);
+        let click_level = (0.95 * f64::from(i16::MAX)) as i16;
+        let mut pcm = Vec::new();
+        for index in 0..(sample_rate * 2) {
+            let tone = (((2.0 * std::f64::consts::PI * 1000.0 * f64::from(index))
+                / f64::from(sample_rate))
+            .sin()
+                * quiet) as i16;
+            let click = index % (sample_rate / 20) < 12;
+            let value = if click { click_level } else { tone };
+            pcm.extend_from_slice(&value.to_le_bytes());
+        }
+        let wav = crate::http::audio::build_wav(
+            crate::http::audio::WavFormat {
+                channels: 1,
+                sample_rate,
+                bits_per_sample: 16,
+            },
+            &pcm,
+        );
+
+        let dir = TempDir::new().expect("temp dir");
+        let path = dir.path.join("fixture.wav");
+        fs::write(&path, &wav).expect("writes the fixture");
+        let measured = measure(&ffmpeg, &dir, &path, DEFAULT_TARGET_LUFS).expect("measurable");
+        assert!(
+            linear_peak_ceiling_db(&measured, DEFAULT_TARGET_LUFS, TRUE_PEAK_DBTP).is_some(),
+            "the fixture must need the limiter: {measured:?}"
+        );
+        assert!(
+            pass2_filter(&measured, DEFAULT_TARGET_LUFS, TRUE_PEAK_DBTP).starts_with("aresample="),
+            "the limiter graph must be the one pass 2 runs"
+        );
+
+        let mastered = premaster(&ffmpeg, &wav, sample_rate, DEFAULT_TARGET_LUFS).expect("masters");
+        assert!(mastered.degraded.is_none(), "{mastered:?}");
+        let peak = mastered.true_peak.expect("measurable");
+        assert!(
+            peak <= TRUE_PEAK_DBTP + 0.05,
+            "limited peak {peak} dBTP is over the ceiling"
+        );
+        // Loudness parity on this branch is NOT asserted here: ffmpeg 4.4 (this
+        // machine) collapses a hard-limited click train to about −42 LUFS, while
+        // 8.1.x (both minis) delivers the target — measured on the host against
+        // real speech during the cutover. What this test owns is that the branch
+        // runs and the ceiling holds.
     }
 }

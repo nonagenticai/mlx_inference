@@ -35,7 +35,7 @@ use crate::error::ApiError;
 
 use super::AppState;
 use super::audio::{
-    ENGINE_SAMPLE_RATE, Segmentation, SpeechAudio, build_wav, parse_wav, synthesize,
+    ENGINE_SAMPLE_RATE, Segmentation, SpeechAudio, build_wav, parse_wav, push_silence, synthesize,
 };
 
 /// Longest accepted `text`, matching the reference request model.
@@ -119,10 +119,19 @@ pub async fn synthesize_compat(
         base["model"] = serde_json::Value::String(model);
     }
 
-    let mut rendered: Vec<Rendered> = Vec::with_capacity(units.len());
+    // The reference decides each pause from the PREVIOUS piece's trailing
+    // punctuation, and inserts none across a boundary that is mid-sentence
+    // (which is exactly what an `<emphasis>` span creates) or around an authored
+    // break. `gap_before` carries that decision into the assembly pass.
+    let mut rendered: Vec<(Rendered, Option<f64>)> = Vec::with_capacity(units.len());
+    let mut previous_text: Option<String> = None;
+    let content_pacing = crate::audio::content_pacing_enabled();
     for unit in units {
         match unit {
-            Unit::Break { seconds } => rendered.push(Rendered::Silence(seconds)),
+            Unit::Break { seconds } => {
+                rendered.push((Rendered::Silence(seconds), None));
+                previous_text = None;
+            }
             Unit::Text { text, speed_factor } => {
                 let speed = match speed_factor {
                     Some(factor) => ssml::effective_speed(validated.speed, factor),
@@ -130,8 +139,15 @@ pub async fn synthesize_compat(
                 };
                 let mut unit_base = base.clone();
                 unit_base["speed"] = serde_json::json!(speed);
+                let gap_before = previous_text
+                    .as_deref()
+                    .and_then(crate::audio::trailing_punct)
+                    .map(|trailing| crate::audio::gap_seconds_for(Some(trailing), content_pacing));
                 match synthesize(&app, &headers, &unit_base, &text, Segmentation::Pieces).await {
-                    Ok(audio) => rendered.push(Rendered::Speech(audio)),
+                    Ok(audio) => {
+                        rendered.push((Rendered::Speech(audio), gap_before));
+                        previous_text = Some(text);
+                    }
                     Err(response) => return response,
                 }
             }
@@ -139,7 +155,7 @@ pub async fn synthesize_compat(
     }
 
     let Some(SpeechAudio { wav: first_wav, .. }) =
-        rendered.iter().find_map(|rendered| match rendered {
+        rendered.iter().find_map(|(rendered, _)| match rendered {
             Rendered::Speech(audio) => Some(audio.clone()),
             Rendered::Silence(_) => None,
         })
@@ -154,7 +170,11 @@ pub async fn synthesize_compat(
     let mut pcm: Vec<u8> = Vec::new();
     let mut speech_seconds = 0.0f64;
     let mut pause_seconds = 0.0f64;
-    for element in &rendered {
+    for (element, gap_before) in &rendered {
+        if let Some(seconds) = gap_before {
+            pause_seconds += seconds;
+            push_silence(&mut pcm, &format, *seconds);
+        }
         match element {
             Rendered::Speech(audio) => {
                 speech_seconds += audio.speech_seconds;
@@ -166,10 +186,7 @@ pub async fn synthesize_compat(
             }
             Rendered::Silence(seconds) => {
                 pause_seconds += seconds;
-                let block = u32::from(format.channels) * u32::from(format.bits_per_sample) / 8;
-                let bytes = (f64::from(format.sample_rate) * seconds * f64::from(block.max(1)))
-                    .round() as usize;
-                pcm.resize(pcm.len() + bytes, 0);
+                push_silence(&mut pcm, &format, *seconds);
             }
         }
     }

@@ -30,7 +30,6 @@ use axum::http::{HeaderMap, StatusCode, header};
 use axum::response::{IntoResponse, Response};
 use serde_json::Value;
 
-use crate::audio::PIECE_GAP_SECONDS;
 use crate::capability::Capability;
 use crate::error::ApiError;
 use crate::worker::{EngineRequest, EngineResponse};
@@ -163,10 +162,11 @@ pub async fn synthesize(
     }
 
     let gap = segmentation == Segmentation::Pieces;
+    let content_pacing = crate::audio::content_pacing_enabled();
     let mut pcm = Vec::new();
     let mut format: Option<WavFormat> = None;
     let mut speech_seconds = 0.0f64;
-    let mut pauses = 0usize;
+    let mut pauses: Vec<f64> = Vec::new();
     for (index, piece) in pieces.iter().enumerate() {
         let mut request = base.clone();
         request["input"] = Value::String(piece.clone());
@@ -205,11 +205,16 @@ pub async fn synthesize(
             }
             Some(_) => {}
         }
-        if gap && index > 0 {
-            push_silence(&mut pcm, &parsed.format, PIECE_GAP_SECONDS);
-            pauses += 1;
+        if gap
+            && index > 0
+            && let Some(trailing) = crate::audio::trailing_punct(&pieces[index - 1])
+        {
+            let seconds = crate::audio::gap_seconds_for(Some(trailing), content_pacing);
+            push_silence(&mut pcm, &parsed.format, seconds);
+            pauses.push(seconds);
         }
-        speech_seconds += parsed.format.duration_secs(parsed.data.len());
+        let piece_seconds = parsed.format.duration_secs(parsed.data.len());
+        speech_seconds += piece_seconds;
         pcm.extend_from_slice(parsed.data);
     }
 
@@ -222,7 +227,7 @@ pub async fn synthesize(
         sample_rate: format.sample_rate,
         duration_sec,
         speech_seconds,
-        pause_seconds: pauses as f64 * PIECE_GAP_SECONDS,
+        pause_seconds: pauses.iter().sum(),
     })
 }
 
@@ -294,7 +299,7 @@ fn with_audio_headers(audio: SpeechAudio, voice: Option<&str>) -> Response {
 }
 
 /// Append `seconds` of silence in `format` to `pcm`.
-fn push_silence(pcm: &mut Vec<u8>, format: &WavFormat, seconds: f64) {
+pub(crate) fn push_silence(pcm: &mut Vec<u8>, format: &WavFormat, seconds: f64) {
     let block_align = format.block_align().max(1) as f64;
     let bytes = (f64::from(format.sample_rate) * seconds * block_align).round() as usize;
     pcm.resize(pcm.len() + bytes, 0);
@@ -566,7 +571,7 @@ mod tests {
             bits_per_sample: 16,
         };
         let mut pcm = Vec::new();
-        push_silence(&mut pcm, &format, PIECE_GAP_SECONDS);
+        push_silence(&mut pcm, &format, crate::audio::PIECE_GAP_SECONDS);
         assert_eq!(pcm.len(), (0.17 * 24_000f64 * 2.0) as usize);
     }
 
