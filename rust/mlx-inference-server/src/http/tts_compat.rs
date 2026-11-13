@@ -142,7 +142,9 @@ pub async fn synthesize_compat(
                 let gap_before = previous_text
                     .as_deref()
                     .and_then(crate::audio::trailing_punct)
-                    .map(|trailing| crate::audio::gap_seconds_for(Some(trailing), content_pacing));
+                    .map(|trailing| {
+                        crate::audio::piece_gap_seconds(Some(trailing), content_pacing)
+                    });
                 match synthesize(&app, &headers, &unit_base, &text, Segmentation::Pieces).await {
                     Ok(audio) => {
                         rendered.push((Rendered::Speech(audio), gap_before));

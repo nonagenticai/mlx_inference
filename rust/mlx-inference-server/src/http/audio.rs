@@ -205,17 +205,31 @@ pub async fn synthesize(
             }
             Some(_) => {}
         }
+        let trimmed;
+        let data = if gap {
+            // The narration contract trims kokoro's model padding off every piece
+            // and pays for it in the gap (see `TRIM_GAP_COMPENSATION_SECONDS`).
+            trimmed = crate::audio::trim_edge_silence(
+                parsed.data,
+                parsed.format.channels,
+                parsed.format.sample_rate,
+                parsed.format.bits_per_sample,
+            );
+            trimmed.as_slice()
+        } else {
+            parsed.data
+        };
         if gap
             && index > 0
             && let Some(trailing) = crate::audio::trailing_punct(&pieces[index - 1])
         {
-            let seconds = crate::audio::gap_seconds_for(Some(trailing), content_pacing);
+            let seconds = crate::audio::piece_gap_seconds(Some(trailing), content_pacing);
             push_silence(&mut pcm, &parsed.format, seconds);
             pauses.push(seconds);
         }
-        let piece_seconds = parsed.format.duration_secs(parsed.data.len());
+        let piece_seconds = parsed.format.duration_secs(data.len());
         speech_seconds += piece_seconds;
-        pcm.extend_from_slice(parsed.data);
+        pcm.extend_from_slice(data);
     }
 
     let Some(format) = format else {
