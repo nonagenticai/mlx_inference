@@ -39,6 +39,12 @@ pub const CHUNK_TARGET_CHARS: usize = 360;
 
 /// `POST /v1/audio/speech`.
 pub async fn speech(State(app): State<AppState>, headers: HeaderMap, body: Bytes) -> Response {
+    // The licence entitlement check runs before any audio work, exactly where
+    // the Python service mounted it router-wide: an unlicensed tenant must not
+    // reach the engine at all, and a 402/503 must not cost a GPU call.
+    if let Err(refusal) = app.licence.authorise(&headers).await {
+        return refusal;
+    }
     let mut request: serde_json::Value = match serde_json::from_slice(&body) {
         Ok(value) => value,
         Err(err) => {
@@ -142,6 +148,9 @@ pub async fn transcriptions(
     headers: HeaderMap,
     body: Bytes,
 ) -> Response {
+    if let Err(refusal) = app.licence.authorise(&headers).await {
+        return refusal;
+    }
     match call(
         &app,
         Capability::Transcription,

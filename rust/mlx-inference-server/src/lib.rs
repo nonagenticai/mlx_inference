@@ -8,6 +8,7 @@ pub mod capability;
 pub mod config;
 pub mod error;
 pub mod http;
+pub mod licence;
 pub mod logging;
 pub mod media_gateway;
 pub mod metrics;

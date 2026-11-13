@@ -31,6 +31,7 @@ use tower_http::cors::{AllowHeaders, AllowMethods, AllowOrigin, CorsLayer};
 
 use crate::auth::{AnthropicApiKey, ApiKey, JwtAuth, api_key_layer, jwt_layer};
 use crate::config::Config;
+use crate::licence::{LicenceConfig, LicenceGate};
 use crate::logging;
 use crate::media_gateway::max_chat_body_bytes;
 use crate::metrics::Metrics;
@@ -48,11 +49,18 @@ pub struct AppState {
     pub stats: Arc<Stats>,
     pub metrics: Arc<Metrics>,
     pub started_at: Instant,
+    /// The licence entitlement gate. Always present; a host without
+    /// `W2V_LICENSE_GATE_ENABLED` gets a disabled one, which admits every
+    /// request exactly like the reference does.
+    pub licence: Arc<LicenceGate>,
 }
 
 impl AppState {
     pub fn new(config: Config, worker: Arc<dyn Worker>) -> Self {
         Self {
+            licence: Arc::new(LicenceGate::new(
+                LicenceConfig::from_env().unwrap_or_else(LicenceConfig::disabled),
+            )),
             stats: Arc::new(Stats::new()),
             metrics: Arc::new(Metrics::new()),
             config: Arc::new(config),
