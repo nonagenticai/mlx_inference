@@ -12,6 +12,15 @@
 //! cap: English runs near one phoneme per character, and the engine rejects the
 //! whole request when a chunk exceeds it.
 //!
+//! Two segmentations exist because the two callers differ:
+//!
+//! - [`Segmentation::EngineCap`] — the OpenAI route. The request goes to the
+//!   engine whole unless it exceeds the engine's caps, exactly as before.
+//! - [`Segmentation::Pieces`] — the legacy narration contract. Every sentence is
+//!   its own engine call and the pieces are joined with [`PIECE_GAP_SECONDS`] of
+//!   silence, because that is what the service this replaces did: without the
+//!   gap consecutive sentences run together and the narration sounds breathless.
+//!
 //! Transcription is a pure pass-through — the request is multipart and the
 //! engine's answer is carried back verbatim.
 
@@ -19,7 +28,9 @@ use axum::body::Bytes;
 use axum::extract::State;
 use axum::http::{HeaderMap, StatusCode, header};
 use axum::response::{IntoResponse, Response};
+use serde_json::Value;
 
+use crate::audio::PIECE_GAP_SECONDS;
 use crate::capability::Capability;
 use crate::error::ApiError;
 use crate::worker::{EngineRequest, EngineResponse};
@@ -37,6 +48,32 @@ pub const MAX_SPEECH_PHONEMES: usize = 510;
 /// spells out numbers and initialisms.
 pub const CHUNK_TARGET_CHARS: usize = 360;
 
+/// The sample rate Kokoro synthesises at. The legacy contract rejects a
+/// `sample_rate` that differs rather than resampling.
+pub const ENGINE_SAMPLE_RATE: u32 = 24_000;
+
+/// How one request is cut before it reaches the engine.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Segmentation {
+    /// Only when the engine's per-request caps demand it.
+    EngineCap,
+    /// One engine call per sentence, joined with a fixed pause.
+    Pieces,
+}
+
+/// One synthesized clip and the figures the routes report about it.
+#[derive(Debug, Clone)]
+pub struct SpeechAudio {
+    pub wav: Vec<u8>,
+    pub sample_rate: u32,
+    /// Length of the whole clip, speech plus inserted pauses.
+    pub duration_sec: f64,
+    /// The part of `duration_sec` that is speech.
+    pub speech_seconds: f64,
+    /// The part of `duration_sec` that is inserted silence.
+    pub pause_seconds: f64,
+}
+
 /// `POST /v1/audio/speech`.
 pub async fn speech(State(app): State<AppState>, headers: HeaderMap, body: Bytes) -> Response {
     // The licence entitlement check runs before any audio work, exactly where
@@ -45,7 +82,7 @@ pub async fn speech(State(app): State<AppState>, headers: HeaderMap, body: Bytes
     if let Err(refusal) = app.licence.authorise(&headers).await {
         return refusal;
     }
-    let mut request: serde_json::Value = match serde_json::from_slice(&body) {
+    let mut request: Value = match serde_json::from_slice(&body) {
         Ok(value) => value,
         Err(err) => {
             return ApiError::invalid_request(format!("invalid JSON body: {err}")).into_response();
@@ -53,12 +90,12 @@ pub async fn speech(State(app): State<AppState>, headers: HeaderMap, body: Bytes
     };
     let voice = request
         .get("voice")
-        .and_then(serde_json::Value::as_str)
+        .and_then(Value::as_str)
         .unwrap_or("af_heart")
         .to_owned();
     let input = request
         .get("input")
-        .and_then(serde_json::Value::as_str)
+        .and_then(Value::as_str)
         .unwrap_or_default()
         .to_owned();
 
@@ -68,78 +105,13 @@ pub async fn speech(State(app): State<AppState>, headers: HeaderMap, body: Bytes
     if request.get("model").is_none()
         && let Some(model) = served_model(&app)
     {
-        request["model"] = serde_json::Value::String(model);
+        request["model"] = Value::String(model);
     }
 
-    if input.chars().count() <= MAX_SPEECH_INPUT_CHARS {
-        return match call(
-            &app,
-            Capability::Speech,
-            headers.get(header::CONTENT_TYPE),
-            Bytes::from(serde_json::to_vec(&request).unwrap_or_default()),
-        )
-        .await
-        {
-            Ok(response) if response.status == 200 => with_audio_headers(response, Some(&voice)),
-            Ok(response) => passthrough(response),
-            Err(response) => response,
-        };
+    match synthesize(&app, &headers, &request, &input, Segmentation::EngineCap).await {
+        Ok(audio) => with_audio_headers(audio, Some(&voice)),
+        Err(response) => response,
     }
-
-    let chunks = chunk_text(&input, CHUNK_TARGET_CHARS);
-    let mut pcm = Vec::new();
-    let mut format: Option<WavFormat> = None;
-    for chunk in chunks {
-        request["input"] = serde_json::Value::String(chunk);
-        let encoded = match serde_json::to_vec(&request) {
-            Ok(bytes) => bytes,
-            Err(err) => {
-                return ApiError::internal(format!("re-encoding the chunk failed: {err}"))
-                    .into_response();
-            }
-        };
-        match call(
-            &app,
-            Capability::Speech,
-            headers.get(header::CONTENT_TYPE),
-            Bytes::from(encoded),
-        )
-        .await
-        {
-            Ok(response) if response.status == 200 => {
-                let parsed = match parse_wav(&response.body) {
-                    Ok(parsed) => parsed,
-                    Err(err) => return ApiError::internal(err).into_response(),
-                };
-                match &format {
-                    None => format = Some(parsed.format),
-                    Some(existing) if *existing != parsed.format => {
-                        return ApiError::internal(
-                            "the engine answered chunks in different audio formats",
-                        )
-                        .into_response();
-                    }
-                    Some(_) => {}
-                }
-                pcm.extend_from_slice(parsed.data);
-            }
-            // A failed chunk fails the request: half a narration is worse than
-            // an error the caller can retry.
-            Ok(response) => return passthrough(response),
-            Err(response) => return response,
-        }
-    }
-
-    let Some(format) = format else {
-        return ApiError::invalid_request("input produced no audio").into_response();
-    };
-    let wav = build_wav(format, &pcm);
-    let response = EngineResponse {
-        status: 200,
-        content_type: Some("audio/wav".to_owned()),
-        body: Bytes::from(wav),
-    };
-    with_audio_headers(response, Some(&voice))
 }
 
 /// `POST /v1/audio/transcriptions` — multipart, forwarded untouched.
@@ -164,7 +136,98 @@ pub async fn transcriptions(
     }
 }
 
-fn served_model(app: &AppState) -> Option<String> {
+/// Synthesize `input`, using `base` as the engine request template.
+///
+/// `base` carries every field the caller set (voice, speed, model, and anything
+/// this server does not model). Only `input` is replaced.
+// The error variant is an already-built HTTP response, the same shape `call`
+// returns below: boxing it would only move the allocation to the error path of
+// every call site.
+#[allow(clippy::result_large_err)]
+pub async fn synthesize(
+    app: &AppState,
+    headers: &HeaderMap,
+    base: &Value,
+    input: &str,
+    segmentation: Segmentation,
+) -> Result<SpeechAudio, Response> {
+    let pieces: Vec<String> = match segmentation {
+        Segmentation::EngineCap if input.chars().count() <= MAX_SPEECH_INPUT_CHARS => {
+            vec![input.to_owned()]
+        }
+        Segmentation::EngineCap => chunk_text(input, CHUNK_TARGET_CHARS),
+        Segmentation::Pieces => sentence_pieces(input),
+    };
+    if pieces.is_empty() {
+        return Err(ApiError::invalid_request("input produced no audio").into_response());
+    }
+
+    let gap = segmentation == Segmentation::Pieces;
+    let mut pcm = Vec::new();
+    let mut format: Option<WavFormat> = None;
+    let mut speech_seconds = 0.0f64;
+    let mut pauses = 0usize;
+    for (index, piece) in pieces.iter().enumerate() {
+        let mut request = base.clone();
+        request["input"] = Value::String(piece.clone());
+        let encoded = match serde_json::to_vec(&request) {
+            Ok(bytes) => bytes,
+            Err(err) => {
+                return Err(
+                    ApiError::internal(format!("re-encoding the chunk failed: {err}"))
+                        .into_response(),
+                );
+            }
+        };
+        let response = match call(
+            app,
+            Capability::Speech,
+            headers.get(header::CONTENT_TYPE),
+            Bytes::from(encoded),
+        )
+        .await
+        {
+            Ok(response) if response.status == 200 => response,
+            // A failed piece fails the request: half a narration is worse than
+            // an error the caller can retry.
+            Ok(response) => return Err(passthrough(response)),
+            Err(response) => return Err(response),
+        };
+        let parsed =
+            parse_wav(&response.body).map_err(|err| ApiError::internal(err).into_response())?;
+        match &format {
+            None => format = Some(parsed.format.clone()),
+            Some(existing) if *existing != parsed.format => {
+                return Err(ApiError::internal(
+                    "the engine answered chunks in different audio formats",
+                )
+                .into_response());
+            }
+            Some(_) => {}
+        }
+        if gap && index > 0 {
+            push_silence(&mut pcm, &parsed.format, PIECE_GAP_SECONDS);
+            pauses += 1;
+        }
+        speech_seconds += parsed.format.duration_secs(parsed.data.len());
+        pcm.extend_from_slice(parsed.data);
+    }
+
+    let Some(format) = format else {
+        return Err(ApiError::invalid_request("input produced no audio").into_response());
+    };
+    let duration_sec = format.duration_secs(pcm.len());
+    Ok(SpeechAudio {
+        wav: build_wav(format.clone(), &pcm),
+        sample_rate: format.sample_rate,
+        duration_sec,
+        speech_seconds,
+        pause_seconds: pauses as f64 * PIECE_GAP_SECONDS,
+    })
+}
+
+/// The checkpoint this host serves, for the engine's required `model` field.
+pub fn served_model(app: &AppState) -> Option<String> {
     app.config
         .default_model
         .clone()
@@ -208,32 +271,62 @@ fn passthrough(response: EngineResponse) -> Response {
 }
 
 /// Add the headers the live narration caller already reads.
-fn with_audio_headers(response: EngineResponse, voice: Option<&str>) -> Response {
-    let (sample_rate, duration) = match parse_wav(&response.body) {
-        Ok(parsed) => (
-            parsed.format.sample_rate,
-            parsed.format.duration_secs(parsed.data.len()),
-        ),
-        Err(err) => return ApiError::internal(err).into_response(),
-    };
-    let mut out = passthrough(EngineResponse {
-        status: response.status,
-        content_type: Some("audio/wav".to_owned()),
-        body: response.body,
-    });
-    let headers = out.headers_mut();
-    if let Ok(value) = header::HeaderValue::from_str(&sample_rate.to_string()) {
-        headers.insert("x-sample-rate", value);
+fn with_audio_headers(audio: SpeechAudio, voice: Option<&str>) -> Response {
+    let mut builder = Response::builder()
+        .status(StatusCode::OK)
+        .header(header::CONTENT_TYPE, "audio/wav");
+    if let Ok(value) = header::HeaderValue::from_str(&audio.sample_rate.to_string()) {
+        builder = builder.header("x-sample-rate", value);
     }
-    if let Ok(value) = header::HeaderValue::from_str(&format!("{duration:.3}")) {
-        headers.insert("x-duration-sec", value);
+    if let Ok(value) = header::HeaderValue::from_str(&format!("{:.3}", audio.duration_sec)) {
+        builder = builder.header("x-duration-sec", value);
     }
     if let Some(voice) = voice
         && let Ok(value) = header::HeaderValue::from_str(voice)
     {
-        headers.insert("x-tts-voice", value);
+        builder = builder.header("x-tts-voice", value);
     }
-    out
+    builder
+        .body(axum::body::Body::from(audio.wav))
+        .unwrap_or_else(|_| {
+            ApiError::internal("failed to build the audio response").into_response()
+        })
+}
+
+/// Append `seconds` of silence in `format` to `pcm`.
+fn push_silence(pcm: &mut Vec<u8>, format: &WavFormat, seconds: f64) {
+    let block_align = format.block_align().max(1) as f64;
+    let bytes = (f64::from(format.sample_rate) * seconds * block_align).round() as usize;
+    pcm.resize(pcm.len() + bytes, 0);
+}
+
+/// One engine piece per sentence, each at most `CHUNK_TARGET_CHARS`.
+///
+/// A sentence longer than the target is cut on whitespace, not dropped: the
+/// engine's phoneme cap rejects the whole request otherwise.
+pub fn sentence_pieces(text: &str) -> Vec<String> {
+    let mut sentences: Vec<String> = Vec::new();
+    let mut current = String::new();
+    for ch in text.chars() {
+        current.push(ch);
+        if matches!(ch, '.' | '!' | '?' | '\n') {
+            sentences.push(std::mem::take(&mut current));
+        }
+    }
+    if !current.trim().is_empty() {
+        sentences.push(current);
+    }
+
+    let mut pieces = Vec::new();
+    for sentence in sentences {
+        for piece in hard_split(&sentence, CHUNK_TARGET_CHARS) {
+            let piece = piece.trim();
+            if !piece.is_empty() {
+                pieces.push(piece.to_owned());
+            }
+        }
+    }
+    pieces
 }
 
 /// Split text on sentence boundaries into pieces of at most `target` characters.
@@ -448,6 +541,33 @@ mod tests {
             assert!(chunk.chars().count() <= 40);
             assert!(!chunk.ends_with(' '));
         }
+    }
+
+    #[test]
+    fn pieces_are_one_per_sentence() {
+        let pieces = sentence_pieces("First one. Second one! Third?");
+        assert_eq!(pieces, vec!["First one.", "Second one!", "Third?"]);
+    }
+
+    #[test]
+    fn a_long_sentence_becomes_several_pieces() {
+        let pieces = sentence_pieces(&"word ".repeat(200));
+        assert!(pieces.len() > 1);
+        for piece in &pieces {
+            assert!(piece.chars().count() <= CHUNK_TARGET_CHARS);
+        }
+    }
+
+    #[test]
+    fn silence_is_appended_in_whole_frames() {
+        let format = WavFormat {
+            channels: 1,
+            sample_rate: 24_000,
+            bits_per_sample: 16,
+        };
+        let mut pcm = Vec::new();
+        push_silence(&mut pcm, &format, PIECE_GAP_SECONDS);
+        assert_eq!(pcm.len(), (0.17 * 24_000f64 * 2.0) as usize);
     }
 
     fn wav_of(samples: usize) -> Vec<u8> {
