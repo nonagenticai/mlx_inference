@@ -9,6 +9,8 @@ use std::fmt;
 use std::path::PathBuf;
 use std::time::Duration;
 
+use crate::capability::Capability;
+
 /// Default `TRUSTED_CIDRS`, copied verbatim from `auth/middleware.py`.
 pub const DEFAULT_TRUSTED_CIDRS: &str =
     "127.0.0.1/32,::1/128,192.168.0.0/16,172.16.0.0/12,10.0.0.0/8";
@@ -77,6 +79,16 @@ pub struct Config {
     /// `MLXCEL_MODEL`: the checkpoint directory or repo id passed as `-m`.
     /// Falls back to the default model id.
     pub mlxcel_model: Option<String>,
+    /// `MLXCEL_EMBEDDING_MODEL`: checkpoint served on `/v1/embeddings` next to
+    /// the chat model, as `--embedding-model`.
+    pub mlxcel_embedding_model: Option<String>,
+    /// `MLXCEL_RERANKER_MODEL`: checkpoint served on `/v1/rerank`, as
+    /// `--reranker-model`.
+    pub mlxcel_reranker_model: Option<String>,
+    /// `MLXCEL_CAPABILITIES`: which capabilities this host serves. Defaults to
+    /// chat plus every capability whose checkpoint is set, so a device that only
+    /// names an embedding model does not mount a chat route it cannot answer.
+    pub mlxcel_capabilities: Vec<Capability>,
     /// `MLXCEL_PORT`: loopback port the sidecar binds. Never 8000.
     pub mlxcel_port: u16,
     /// `MLXCEL_API_KEY`: bearer the sidecar requires; unset means no auth.
@@ -143,6 +155,15 @@ impl Config {
             None => DEFAULT_MLXCEL_READY_TIMEOUT,
         };
 
+        let mlxcel_embedding_model =
+            raw_non_empty(env, "MLXCEL_EMBEDDING_MODEL").map(str::to_owned);
+        let mlxcel_reranker_model = raw_non_empty(env, "MLXCEL_RERANKER_MODEL").map(str::to_owned);
+        let mlxcel_capabilities = parse_capabilities(
+            raw_non_empty(env, "MLXCEL_CAPABILITIES"),
+            mlxcel_embedding_model.is_some(),
+            mlxcel_reranker_model.is_some(),
+        )?;
+
         Ok(Self {
             port,
             host,
@@ -167,6 +188,9 @@ impl Config {
                 .map(PathBuf::from)
                 .unwrap_or_else(|| PathBuf::from(DEFAULT_MLXCEL_BIN)),
             mlxcel_model: raw_non_empty(env, "MLXCEL_MODEL").map(str::to_owned),
+            mlxcel_embedding_model,
+            mlxcel_reranker_model,
+            mlxcel_capabilities,
             mlxcel_port,
             mlxcel_api_key: raw_non_empty(env, "MLXCEL_API_KEY").map(|raw| raw.trim().to_owned()),
             mlxcel_ready_timeout,
@@ -193,6 +217,8 @@ pub enum ConfigError {
     UnsupportedJwtAlgorithm(String),
     InvalidMlxcelPort(String),
     InvalidMlxcelTimeout(String),
+    InvalidCapability(String),
+    UnsupportedCapability(Capability),
 }
 
 impl fmt::Display for ConfigError {
@@ -210,6 +236,15 @@ impl fmt::Display for ConfigError {
             Self::InvalidMlxcelTimeout(value) => {
                 write!(f, "invalid MLXCEL_READY_TIMEOUT_SECS: {value:?}")
             }
+            Self::InvalidCapability(value) => write!(
+                f,
+                "invalid MLXCEL_CAPABILITIES entry {value:?}: expected one of chat, embedding, rerank"
+            ),
+            Self::UnsupportedCapability(cap) => write!(
+                f,
+                "MLXCEL_CAPABILITIES={cap} is not available in the pinned engine build: \
+                 it cannot load a {cap} checkpoint (mlx_inference#6)"
+            ),
         }
     }
 }
@@ -262,6 +297,56 @@ fn split_list(raw: &str) -> Vec<String> {
         .filter(|part| !part.is_empty())
         .map(str::to_owned)
         .collect()
+}
+
+/// Resolve `MLXCEL_CAPABILITIES`.
+///
+/// An unset list means "whatever this host was given a checkpoint for", which is
+/// the only default that cannot mount a route the engine has no model behind.
+/// An explicit list is authoritative: it may *narrow* the defaults (a device
+/// that holds an embedding model but must not answer `/v1/embeddings`) or
+/// *widen* them to chat, and nothing else.
+///
+/// Audio capabilities are rejected rather than mounted: the engine build this
+/// server currently pins cannot load a Kokoro or Whisper checkpoint, so enabling
+/// them here would advertise a route that dies at startup
+/// (`docs/`, `mlx_inference` issue #6).
+fn parse_capabilities(
+    raw: Option<&str>,
+    has_embedding: bool,
+    has_reranker: bool,
+) -> Result<Vec<Capability>, ConfigError> {
+    let Some(raw) = raw else {
+        let mut caps = vec![Capability::Chat];
+        if has_embedding {
+            caps.push(Capability::Embedding);
+        }
+        if has_reranker {
+            caps.push(Capability::Rerank);
+        }
+        return Ok(caps);
+    };
+
+    let mut caps: Vec<Capability> = Vec::new();
+    for part in split_list(raw) {
+        let cap =
+            Capability::parse(&part).ok_or_else(|| ConfigError::InvalidCapability(part.clone()))?;
+        if !matches!(
+            cap,
+            Capability::Chat | Capability::Embedding | Capability::Rerank
+        ) {
+            return Err(ConfigError::UnsupportedCapability(cap));
+        }
+        if !caps.contains(&cap) {
+            caps.push(cap);
+        }
+    }
+    if caps.is_empty() {
+        caps.push(Capability::Chat);
+    }
+    // Canonical order, so `/health` reads the same on every host.
+    caps.sort_unstable();
+    Ok(caps)
 }
 
 #[cfg(test)]
@@ -396,5 +481,50 @@ mod tests {
 
         let err = Config::from_env(&env(&[("MLXCEL_PORT", "eight")])).expect_err("rejected");
         assert_eq!(err, ConfigError::InvalidMlxcelPort("eight".to_owned()));
+    }
+
+    #[test]
+    fn capabilities_default_to_the_checkpoints_this_host_was_given() {
+        let cfg =
+            Config::from_env(&env(&[("MLXCEL_EMBEDDING_MODEL", "BAAI/bge-m3")])).expect("valid");
+        assert_eq!(
+            cfg.mlxcel_capabilities,
+            vec![Capability::Chat, Capability::Embedding]
+        );
+
+        let cfg = Config::from_env(&env(&[
+            ("MLXCEL_EMBEDDING_MODEL", "BAAI/bge-m3"),
+            ("MLXCEL_RERANKER_MODEL", "BAAI/bge-reranker-v2-m3"),
+        ]))
+        .expect("valid");
+        assert_eq!(
+            cfg.mlxcel_capabilities,
+            vec![Capability::Chat, Capability::Embedding, Capability::Rerank]
+        );
+    }
+
+    #[test]
+    fn an_explicit_capability_list_wins_and_is_deduplicated() {
+        let cfg = Config::from_env(&env(&[
+            ("MLXCEL_EMBEDDING_MODEL", "BAAI/bge-m3"),
+            ("MLXCEL_CAPABILITIES", "rerank, embedding,embedding"),
+        ]))
+        .expect("valid");
+        assert_eq!(
+            cfg.mlxcel_capabilities,
+            vec![Capability::Embedding, Capability::Rerank],
+            "chat is dropped when the host does not list it"
+        );
+    }
+
+    #[test]
+    fn unknown_and_unavailable_capabilities_are_rejected() {
+        let err =
+            Config::from_env(&env(&[("MLXCEL_CAPABILITIES", "vision")])).expect_err("rejected");
+        assert_eq!(err, ConfigError::InvalidCapability("vision".to_owned()));
+
+        let err =
+            Config::from_env(&env(&[("MLXCEL_CAPABILITIES", "speech")])).expect_err("rejected");
+        assert_eq!(err, ConfigError::UnsupportedCapability(Capability::Speech));
     }
 }

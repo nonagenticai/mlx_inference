@@ -4,6 +4,7 @@
 //! surface, auth, validation, SSE framing and the worker socket client.
 
 pub mod auth;
+pub mod capability;
 pub mod config;
 pub mod error;
 pub mod http;
