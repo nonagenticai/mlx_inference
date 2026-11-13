@@ -21,17 +21,19 @@ repos:
       - id: check-merge-conflict
       - id: detect-private-key
 
-  # Secret detection
-  - repo: https://github.com/Yelp/detect-secrets
-    rev: v1.5.0
-    hooks:
-      - id: detect-secrets
-        args: [--baseline, .secrets.baseline]
-        exclude: package-lock.json
-
   # Rust formatting and lints run before a push.
   - repo: local
     hooks:
+      # Same scanner as CI (.github/workflows/secret-scan.yml). Install it with
+      # `brew install betterleaks`; scripts/setup-dev.sh does that for you.
+      - id: betterleaks
+        name: betterleaks (staged changes)
+        entry: betterleaks git --pre-commit --staged --redact --no-banner --config .betterleaks.toml
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-commit]
+
       - id: cargo-fmt
         name: cargo fmt
         entry: cargo fmt --manifest-path rust/Cargo.toml --all -- --check

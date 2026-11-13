@@ -1,0 +1,14 @@
+# betterleaks configuration (https://betterleaks.com).
+#
+# Use the built-in rule set, plus one allowlist entry for a historical file.
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = '''
+`detect-secrets` baselines store SHA-1 hashes of candidate strings, not the
+strings themselves, so their `hashed_secret` values look like API keys to an
+entropy rule. The file was tracked until 2026-11-13 and still appears in the
+first two commits; it is no longer tracked and nothing regenerates it.
+'''
+paths = ['''\.secrets\.baseline$''']

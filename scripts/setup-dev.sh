@@ -16,6 +16,11 @@ if ! command -v mlxcel-server >/dev/null 2>&1; then
   brew install lablup/tap/mlxcel
 fi
 
+if ! command -v betterleaks >/dev/null 2>&1; then
+  echo "Installing the secret scanner (betterleaks)..."
+  brew install betterleaks
+fi
+
 if command -v pre-commit >/dev/null 2>&1; then
   echo "Installing pre-commit hooks..."
   pre-commit install -t pre-commit -t pre-push
