@@ -24,8 +24,12 @@ repos:
   # Rust formatting and lints run before a push.
   - repo: local
     hooks:
-      # Same scanner as CI (.github/workflows/secret-scan.yml). Install it with
-      # `brew install betterleaks`; scripts/setup-dev.sh does that for you.
+      # Same scanner and same rules as CI (.github/workflows/secret-scan.yml):
+      # the fleet betterleaks config, vendored into `.betterleaks.toml` — a
+      # repo-local config replaces the fleet one rather than merging with it, so
+      # it has to carry the estate rules verbatim. See that file's header before
+      # editing it. Install the binary with `brew install betterleaks`;
+      # `scripts/setup-dev.sh` does that for you.
       - id: betterleaks
         name: betterleaks (staged changes)
         entry: betterleaks git --pre-commit --staged --redact --no-banner --config .betterleaks.toml
