@@ -7,6 +7,7 @@
 //! All three routes are public — they are listed in the reference
 //! `PUBLIC_ENDPOINTS` and the router probes them before any auth exists.
 
+use std::collections::BTreeMap;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use axum::Json;
@@ -15,6 +16,7 @@ use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use serde::Serialize;
 
+use crate::capability::Capability;
 use crate::error::ApiError;
 
 use super::AppState;
@@ -33,6 +35,10 @@ pub struct HealthResponse {
     pub status: &'static str,
     pub models_loaded: Vec<String>,
     pub default_model: Option<String>,
+    /// Per-capability reachability. Every entry moves with the engine: one
+    /// sidecar serves them all, so they are up or down together, but a host that
+    /// serves only embeddings should say so instead of reporting nothing.
+    pub capabilities: BTreeMap<&'static str, &'static str>,
     pub timestamp: String,
     pub system_fingerprint: &'static str,
 }
@@ -51,7 +57,13 @@ pub async fn health(State(app): State<AppState>) -> Json<HealthResponse> {
         }
     };
 
-    let ready = !models.is_empty();
+    let capabilities: Vec<Capability> = app.worker.capabilities().to_vec();
+    let engine_up = app.worker.status().is_up();
+    // A device with no chat checkpoint still serves: readiness is "the engine is
+    // up and this host has something to ask it", not "a chat model is loaded".
+    let serves_non_chat = capabilities.iter().any(|cap| *cap != Capability::Chat);
+    let ready = !models.is_empty() || (engine_up && serves_non_chat);
+
     Json(HealthResponse {
         status: if ready { "healthy" } else { "unhealthy" },
         models_loaded: models.iter().map(|model| model.id.clone()).collect(),
@@ -59,6 +71,10 @@ pub async fn health(State(app): State<AppState>) -> Json<HealthResponse> {
             .iter()
             .find(|model| model.is_default)
             .map(|model| model.id.clone()),
+        capabilities: capabilities
+            .into_iter()
+            .map(|cap| (cap.as_str(), if engine_up { "up" } else { "down" }))
+            .collect(),
         timestamp: timestamp_now(),
         system_fingerprint: SYSTEM_FINGERPRINT,
     })

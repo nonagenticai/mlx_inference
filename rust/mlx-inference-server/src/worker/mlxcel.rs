@@ -27,17 +27,19 @@ use std::sync::{Arc, Mutex, MutexGuard, PoisonError, Weak};
 use std::time::{Duration, Instant, SystemTime};
 
 use async_trait::async_trait;
+use axum::body::Bytes;
 use serde_json::{Map, Value, json};
 use tokio::process::{Child, Command};
 use tokio::sync::mpsc;
 use tokio::task::AbortHandle;
 use tokio_stream::StreamExt;
 
+use crate::capability::Capability;
 use crate::config::Config;
 use crate::error::ApiError;
 use crate::worker::{
-    CancelTarget, DeltaField, GenerateParams, GenerateRequest, GenerateStream, ModelRecord,
-    StopSequence, Worker, WorkerError, WorkerEvent, WorkerStatus,
+    CancelTarget, DeltaField, EngineRequest, EngineResponse, GenerateParams, GenerateRequest,
+    GenerateStream, ModelRecord, StopSequence, Worker, WorkerError, WorkerEvent, WorkerStatus,
 };
 
 /// Largest image payload the sidecar accepts, matching `MediaLimits` (20 MB).
@@ -49,6 +51,40 @@ pub const MAX_IMAGES: u32 = 6;
 pub const MAX_STARTUP_FAILURES: u32 = 3;
 /// Seconds the supervisor waits for a busy sidecar port before giving up.
 pub const MAX_PORT_CONFLICTS: u32 = 30;
+/// Per-request budget for a forwarded capability call. Embedding a batch or
+/// reranking a long document set is seconds, not minutes; a hung worker must
+/// free the connection rather than pin it until the client gives up.
+pub const FORWARD_TIMEOUT: Duration = Duration::from_secs(120);
+
+/// Drop the JSON `model` field before forwarding a capability request.
+///
+/// A process serves at most one checkpoint per capability, and the engine
+/// rejects a request that names any other — but the ids it accepts are the ones
+/// it derived itself (a snapshot hash for a repo id, the directory name for a
+/// path), which no caller can be expected to know. Verified against the engine on
+/// 2026-11-13: an omitted field selects the served checkpoint. So the field is
+/// removed rather than re-written. A body that is not a JSON object passes
+/// through untouched: the engine's own 400 says more than anything invented here.
+fn strip_model_field(capability: Capability, body: Bytes) -> Bytes {
+    let Ok(mut value) = serde_json::from_slice::<Value>(&body) else {
+        return body;
+    };
+    let Some(object) = value.as_object_mut() else {
+        return body;
+    };
+    let Some(requested) = object.remove("model") else {
+        return body;
+    };
+    tracing::debug!(
+        capability = %capability,
+        requested = requested.as_str().unwrap_or("<non-string>"),
+        "forward: dropping the client's model id in favour of the served checkpoint"
+    );
+    match serde_json::to_vec(&value) {
+        Ok(bytes) => Bytes::from(bytes),
+        Err(_) => body,
+    }
+}
 
 /// Everything the worker needs to reach (or start) the sidecar.
 #[derive(Debug, Clone)]
@@ -61,6 +97,13 @@ pub struct MlxcelConfig {
     pub bin: PathBuf,
     /// Checkpoint directory or repo id passed to `-m`.
     pub model_path: String,
+    /// Checkpoint served on `/v1/embeddings` next to the chat model, as
+    /// `--embedding-model`. Unset means no embedding route.
+    pub embedding_model: Option<String>,
+    /// Checkpoint served on `/v1/rerank`, as `--reranker-model`.
+    pub reranker_model: Option<String>,
+    /// Capabilities this host serves. The HTTP layer mounts exactly these.
+    pub capabilities: Vec<Capability>,
     /// The id this server exposes in `/v1/models` and accepts from clients.
     pub model_id: String,
     /// Loopback port the sidecar binds.
@@ -93,6 +136,9 @@ impl MlxcelConfig {
             api_key: config.mlxcel_api_key.clone(),
             bin: config.mlxcel_bin.clone(),
             model_path,
+            embedding_model: config.mlxcel_embedding_model.clone(),
+            reranker_model: config.mlxcel_reranker_model.clone(),
+            capabilities: config.mlxcel_capabilities.clone(),
             model_id,
             port: config.mlxcel_port,
             ready_timeout: config.mlxcel_ready_timeout,
@@ -107,6 +153,9 @@ impl MlxcelConfig {
             api_key: None,
             bin: PathBuf::from("mlxcel-server"),
             model_path: "test-model".to_owned(),
+            embedding_model: None,
+            reranker_model: None,
+            capabilities: vec![Capability::Chat],
             model_id: model_id.into(),
             port: 0,
             ready_timeout: Duration::from_secs(1),
@@ -339,6 +388,15 @@ impl MlxcelWorker {
         if let Some(key) = &self.cfg.api_key {
             command.arg("--api-key").arg(key);
         }
+        // Side checkpoints. The engine serves each on its own worker thread
+        // beside the chat model in `-m`; a capability with no checkpoint is not
+        // passed at all, so its route answers 501 rather than being advertised.
+        if let Some(model) = &self.cfg.embedding_model {
+            command.arg("--embedding-model").arg(model);
+        }
+        if let Some(model) = &self.cfg.reranker_model {
+            command.arg("--reranker-model").arg(model);
+        }
         command.spawn().map_err(|err| {
             WorkerError::Unavailable(format!("failed to spawn {}: {err}", self.cfg.bin.display()))
         })
@@ -434,6 +492,66 @@ impl MlxcelWorker {
 
 #[async_trait]
 impl Worker for MlxcelWorker {
+    fn capabilities(&self) -> &[Capability] {
+        &self.cfg.capabilities
+    }
+
+    /// Forward one non-chat request to the engine's own route.
+    ///
+    /// Two things happen here and nothing else. The `model` field is pinned to
+    /// the checkpoint this server actually serves, because a caller names the
+    /// model by repo id while the engine knows it by the name it was launched
+    /// with. And the engine's answer — status, content type, body, including its
+    /// own queue-full 503 — is carried back unaltered.
+    async fn forward(
+        &self,
+        capability: Capability,
+        request: EngineRequest,
+    ) -> Result<EngineResponse, WorkerError> {
+        if !self.status().is_up() {
+            return Err(WorkerError::Unavailable(self.status_note()));
+        }
+        let body = if capability.takes_json_model() {
+            strip_model_field(capability, request.body)
+        } else {
+            request.body
+        };
+        let mut builder = self
+            .client
+            .post(format!("{}{}", self.cfg.base_url, capability.engine_path()))
+            .body(body)
+            .timeout(FORWARD_TIMEOUT);
+        if let Some(content_type) = request.content_type {
+            builder = builder.header(reqwest::header::CONTENT_TYPE, content_type);
+        }
+        if let Some(key) = &self.cfg.api_key {
+            builder = builder.bearer_auth(key);
+        }
+        let response = builder.send().await.map_err(|err| {
+            WorkerError::Unavailable(format!(
+                "mlxcel {} request failed: {err}",
+                capability.engine_path()
+            ))
+        })?;
+        let status = response.status().as_u16();
+        let content_type = response
+            .headers()
+            .get(reqwest::header::CONTENT_TYPE)
+            .and_then(|value| value.to_str().ok())
+            .map(str::to_owned);
+        let body = response.bytes().await.map_err(|err| {
+            WorkerError::Unavailable(format!(
+                "mlxcel {} body failed: {err}",
+                capability.engine_path()
+            ))
+        })?;
+        Ok(EngineResponse {
+            status,
+            content_type,
+            body,
+        })
+    }
+
     async fn models(&self) -> Result<Vec<ModelRecord>, WorkerError> {
         if !self.status().is_up() {
             return Err(WorkerError::Unavailable(self.status_note()));
@@ -1123,5 +1241,51 @@ mod tests {
         assert_eq!(usage["completion_tps"], Value::Null);
         assert_eq!(usage["total_ms"], json!(5.0));
         assert_eq!(usage["prompt_tokens"], json!(0));
+    }
+
+    #[test]
+    fn the_clients_model_id_is_dropped_so_the_served_checkpoint_answers() {
+        let out = strip_model_field(
+            Capability::Embedding,
+            Bytes::from_static(br#"{"model":"BAAI/bge-m3","input":["x"]}"#),
+        );
+        let value = serde_json::from_slice::<Value>(&out).expect("json");
+        assert!(
+            value.get("model").is_none(),
+            "the engine picks its own model"
+        );
+        assert_eq!(value["input"], json!(["x"]), "everything else survives");
+
+        let out = strip_model_field(
+            Capability::Rerank,
+            Bytes::from_static(br#"{"model":17,"query":"q","documents":["a"]}"#),
+        );
+        let value = serde_json::from_slice::<Value>(&out).expect("json");
+        assert!(value.get("model").is_none(), "a non-string id goes too");
+        assert_eq!(value["query"], json!("q"));
+    }
+
+    #[test]
+    fn bodies_the_rule_cannot_apply_to_are_passed_through_untouched() {
+        let raw = Bytes::from_static(b"not json");
+        assert_eq!(
+            strip_model_field(Capability::Embedding, raw.clone()),
+            raw,
+            "an unparsable body is the engine's to reject"
+        );
+
+        let array = Bytes::from_static(b"[1,2,3]");
+        assert_eq!(
+            strip_model_field(Capability::Embedding, array.clone()),
+            array,
+            "a non-object body has no model field"
+        );
+
+        let without = Bytes::from_static(br#"{"input":["x"]}"#);
+        assert_eq!(
+            strip_model_field(Capability::Embedding, without.clone()),
+            without,
+            "a body with no model field is already correct"
+        );
     }
 }

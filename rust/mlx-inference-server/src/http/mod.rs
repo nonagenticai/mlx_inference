@@ -6,6 +6,7 @@
 
 pub mod admission;
 pub mod anthropic;
+pub mod capabilities;
 pub mod chat;
 pub mod health;
 pub mod models;
@@ -151,6 +152,9 @@ pub fn router(state: AppState) -> Router {
         .merge(base)
         .merge(v1)
         .merge(messages)
+        // Mounted per capability: a host that serves no embedding model has no
+        // `/v1/embeddings` route at all rather than one that answers 501.
+        .merge(capabilities::capability_routes(&state))
         .merge(stats_routes)
         // `/metrics` is guarded by the JWT middleware only.
         .merge(stats::metrics_only_routes(metrics))

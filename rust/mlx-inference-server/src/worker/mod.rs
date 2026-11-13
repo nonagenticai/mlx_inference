@@ -15,11 +15,13 @@ use std::task::{Context, Poll};
 use std::time::SystemTime;
 
 use async_trait::async_trait;
+use axum::body::Bytes;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tokio::sync::mpsc;
 use tokio_stream::Stream;
 
+use crate::capability::Capability;
 use crate::error::ApiError;
 
 /// The field a delta token belongs to.
@@ -279,12 +281,53 @@ impl Stream for GenerateStream {
     }
 }
 
+/// One request forwarded to the engine in the engine's own wire format.
+///
+/// The body is opaque on purpose. Embeddings, reranking and audio are JSON or
+/// multipart/binary requests whose schemas the engine already owns; re-modelling
+/// them here would duplicate the schema and break on every additive change, and
+/// it would flatten the engine's own admission answer (a queue-full 503 with its
+/// own body) into something generic. The same reasoning as `usage` staying
+/// opaque JSON in [`WorkerEvent::Done`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EngineRequest {
+    pub content_type: Option<String>,
+    pub body: Bytes,
+}
+
+/// The engine's answer, carried back to the client unaltered.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EngineResponse {
+    pub status: u16,
+    pub content_type: Option<String>,
+    pub body: Bytes,
+}
+
 /// The boundary the HTTP layer depends on. [`mlxcel::MlxcelWorker`] is the
 /// only implementation.
 #[async_trait]
 pub trait Worker: Send + Sync {
     async fn models(&self) -> Result<Vec<ModelRecord>, WorkerError>;
     async fn generate(&self, req: GenerateRequest) -> Result<GenerateStream, WorkerError>;
+    /// Capabilities this worker serves. Empty for a worker that forwards
+    /// nothing; the HTTP layer mounts a route only when its capability is
+    /// listed here.
+    fn capabilities(&self) -> &[Capability] {
+        &[]
+    }
+    /// Forward one non-chat request to the engine's own route and return the
+    /// engine's answer. The default refuses: a worker without an engine behind
+    /// it must not answer as though one were there.
+    async fn forward(
+        &self,
+        capability: Capability,
+        request: EngineRequest,
+    ) -> Result<EngineResponse, WorkerError> {
+        let _ = (capability, request);
+        Err(WorkerError::Unavailable(
+            "this worker does not forward engine capabilities".to_owned(),
+        ))
+    }
     /// Count `content` with the engine's own tokenizer, exactly as the engine
     /// would split it. Returns the number of token ids, not an estimate.
     ///
