@@ -13,6 +13,7 @@ pub mod health;
 pub mod models;
 pub mod stats;
 pub mod stream;
+pub mod tts_compat;
 pub mod ui;
 
 use std::sync::Arc;
@@ -29,8 +30,10 @@ use axum::routing::{get, post};
 use tokio_stream::StreamExt;
 use tower_http::cors::{AllowHeaders, AllowMethods, AllowOrigin, CorsLayer};
 
+use crate::audio::premaster::{FfmpegMasterer, Masterer};
 use crate::auth::{AnthropicApiKey, ApiKey, JwtAuth, api_key_layer, jwt_layer};
 use crate::config::Config;
+use crate::licence::{LicenceConfig, LicenceGate};
 use crate::logging;
 use crate::media_gateway::max_chat_body_bytes;
 use crate::metrics::Metrics;
@@ -48,16 +51,36 @@ pub struct AppState {
     pub stats: Arc<Stats>,
     pub metrics: Arc<Metrics>,
     pub started_at: Instant,
+    /// The licence entitlement gate. Always present; a host without
+    /// `W2V_LICENSE_GATE_ENABLED` gets a disabled one, which admits every
+    /// request exactly like the reference does.
+    pub licence: Arc<LicenceGate>,
+    /// The loudness premaster the legacy narration route applies. Always
+    /// present; a host without ffmpeg gets one that hands clips back unchanged
+    /// and says so in `X-TTS-Premaster-Degraded`.
+    pub masterer: Arc<dyn Masterer>,
 }
 
 impl AppState {
     pub fn new(config: Config, worker: Arc<dyn Worker>) -> Self {
+        Self::with_masterer(config, worker, Arc::new(FfmpegMasterer::from_env()))
+    }
+
+    pub fn with_masterer(
+        config: Config,
+        worker: Arc<dyn Worker>,
+        masterer: Arc<dyn Masterer>,
+    ) -> Self {
         Self {
+            licence: Arc::new(LicenceGate::new(
+                LicenceConfig::from_env().unwrap_or_else(LicenceConfig::disabled),
+            )),
             stats: Arc::new(Stats::new()),
             metrics: Arc::new(Metrics::new()),
             config: Arc::new(config),
             worker,
             started_at: Instant::now(),
+            masterer,
         }
     }
 

@@ -62,7 +62,14 @@ pub fn capability_routes(state: &AppState) -> Router {
             // not, and a shared limit would size both to the larger one.
             Capability::Speech => {
                 audio_mounted += 1;
-                audio = audio.route("/v1/audio/speech", post(super::audio::speech));
+                audio = audio
+                    .route("/v1/audio/speech", post(super::audio::speech))
+                    // The legacy narration contract, mounted on the same
+                    // capability: a host that serves no Kokoro has neither.
+                    .route(
+                        "/api/tts/synthesize",
+                        post(super::tts_compat::synthesize_compat),
+                    );
             }
             Capability::Transcription => {
                 audio_mounted += 1;
@@ -411,5 +418,142 @@ mod tests {
         let worker = Arc::new(SpeechWorker::new(503));
         let (status, _, _) = speech(speech_app(worker), "Hello there.").await;
         assert_eq!(status, 503);
+    }
+
+    /// Hands the clip back untouched and claims the reference's figures, so the
+    /// compat route's own contract can be asserted without ffmpeg.
+    struct FakeMasterer;
+
+    impl crate::audio::premaster::Masterer for FakeMasterer {
+        fn master(
+            &self,
+            wav: &[u8],
+            _sample_rate: u32,
+            _target_lufs: f64,
+        ) -> crate::audio::premaster::MasteredAudio {
+            crate::audio::premaster::MasteredAudio {
+                wav: wav.to_vec(),
+                lufs: Some(-18.0),
+                true_peak: Some(-1.5),
+                degraded: None,
+            }
+        }
+    }
+
+    fn compat_app(worker: Arc<SpeechWorker>) -> axum::Router {
+        let mut config = Config::from_env(&std::collections::HashMap::new()).expect("defaults");
+        config.auth_enabled = false;
+        let state =
+            AppState::with_masterer(config, worker as Arc<dyn Worker>, Arc::new(FakeMasterer));
+        crate::http::router(state)
+    }
+
+    async fn compat(
+        router: axum::Router,
+        body: &str,
+        accept: Option<&str>,
+    ) -> (StatusCode, axum::http::HeaderMap, Vec<u8>) {
+        let mut builder = Request::builder()
+            .method("POST")
+            .uri("/api/tts/synthesize")
+            .header(header::CONTENT_TYPE, "application/json");
+        if let Some(accept) = accept {
+            builder = builder.header(header::ACCEPT, accept);
+        }
+        let response = router
+            .oneshot(builder.body(Body::from(body.to_owned())).expect("request"))
+            .await
+            .expect("response");
+        let status = response.status();
+        let headers = response.headers().clone();
+        let bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("body")
+            .to_vec();
+        (status, headers, bytes)
+    }
+
+    #[tokio::test]
+    async fn the_json_variant_carries_the_envelope_and_the_master_headers() {
+        let worker = Arc::new(SpeechWorker::new(200));
+        let (status, headers, body) = compat(
+            compat_app(worker),
+            r#"{"text":"Hello there."}"#,
+            Some("application/json"),
+        )
+        .await;
+        assert_eq!(status, 200);
+        assert_eq!(headers.get("x-tts-lufs").unwrap(), "-18.00");
+        assert_eq!(headers.get("x-tts-truepeak-dbtp").unwrap(), "-1.50");
+        let parsed: serde_json::Value = serde_json::from_slice(&body).expect("json");
+        assert!(parsed.get("audio_base64").is_some());
+        assert_eq!(parsed["provider"], "kokoro");
+        assert_eq!(parsed["voice"], "af_heart");
+        assert_eq!(parsed["format"], "wav");
+        assert!(
+            parsed.get("word_timings").is_none(),
+            "word_timings must be absent, not null"
+        );
+    }
+
+    #[tokio::test]
+    async fn the_default_variant_is_raw_wav_with_the_reference_headers() {
+        let worker = Arc::new(SpeechWorker::new(200));
+        let (status, headers, body) =
+            compat(compat_app(worker), r#"{"text":"Hello there."}"#, None).await;
+        assert_eq!(status, 200);
+        assert_eq!(headers.get(header::CONTENT_TYPE).unwrap(), "audio/wav");
+        assert_eq!(headers.get("x-tts-provider").unwrap(), "kokoro");
+        assert_eq!(headers.get("x-tts-sample-rate").unwrap(), "24000");
+        assert!(headers.get("x-tts-duration-sec").is_some());
+        assert_eq!(&body[..4], b"RIFF");
+    }
+
+    #[tokio::test]
+    async fn every_sentence_is_its_own_engine_call() {
+        let worker = Arc::new(SpeechWorker::new(200));
+        let (status, _, _) = compat(
+            compat_app(worker.clone()),
+            r#"{"text":"One. Two! Three?"}"#,
+            None,
+        )
+        .await;
+        assert_eq!(status, 200);
+        assert_eq!(
+            worker.calls.load(std::sync::atomic::Ordering::SeqCst),
+            3,
+            "a sentence is one piece"
+        );
+    }
+
+    #[tokio::test]
+    async fn an_unsupported_ssml_tag_is_a_400_naming_it() {
+        let worker = Arc::new(SpeechWorker::new(200));
+        let (status, _, body) = compat(
+            compat_app(worker),
+            r#"{"text":"<speak><phoneme ph=\"h\">hi</phoneme></speak>"}"#,
+            None,
+        )
+        .await;
+        assert_eq!(status, 400);
+        let parsed: serde_json::Value = serde_json::from_slice(&body).expect("json");
+        assert!(
+            parsed.to_string().contains("phoneme"),
+            "the refusal must name the tag: {parsed}"
+        );
+    }
+
+    #[tokio::test]
+    async fn kitten_is_refused_by_name() {
+        let worker = Arc::new(SpeechWorker::new(200));
+        let (status, _, body) = compat(
+            compat_app(worker),
+            r#"{"text":"hi","provider":"kitten"}"#,
+            None,
+        )
+        .await;
+        assert_eq!(status, 400);
+        let parsed: serde_json::Value = serde_json::from_slice(&body).expect("json");
+        assert!(parsed.to_string().contains("kitten"));
     }
 }
