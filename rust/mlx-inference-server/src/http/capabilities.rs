@@ -34,37 +34,60 @@ use super::AppState;
 /// reject anyway, and buffering it first helps nobody.
 pub const MAX_CAPABILITY_BODY_BYTES: usize = 8 * 1024 * 1024;
 
+/// Body budget for the audio routes. A transcription upload carries an audio
+/// file, so it is sized for one rather than for a JSON batch.
+pub const MAX_AUDIO_BODY_BYTES: usize = 32 * 1024 * 1024;
+
 /// Seconds a client is asked to wait after the engine shed the request.
 const SHED_RETRY_AFTER: &str = "1";
 
 /// The capability routes this host actually serves.
 pub fn capability_routes(state: &AppState) -> Router {
     let mut routes: Router<AppState> = Router::new();
+    let mut audio: Router<AppState> = Router::new();
     let mut mounted = 0usize;
+    let mut audio_mounted = 0usize;
     for capability in state.worker.capabilities() {
-        routes = match capability {
+        match capability {
             Capability::Embedding => {
                 mounted += 1;
-                routes.route("/v1/embeddings", post(embeddings))
+                routes = routes.route("/v1/embeddings", post(embeddings));
             }
             Capability::Rerank => {
                 mounted += 1;
-                routes.route("/v1/rerank", post(rerank))
+                routes = routes.route("/v1/rerank", post(rerank));
             }
-            // Chat keeps its own typed handlers and its own admission slot;
-            // audio is not served by the engine build this pins (issue #6).
-            _ => routes,
-        };
+            // Audio routes carry their own body budget: an upload for
+            // transcription is tens of megabytes where an embedding batch is
+            // not, and a shared limit would size both to the larger one.
+            Capability::Speech => {
+                audio_mounted += 1;
+                audio = audio.route("/v1/audio/speech", post(super::audio::speech));
+            }
+            Capability::Transcription => {
+                audio_mounted += 1;
+                audio = audio.route(
+                    "/v1/audio/transcriptions",
+                    post(super::audio::transcriptions),
+                );
+            }
+            // Chat keeps its own typed handlers and its own admission slot.
+            Capability::Chat => {}
+        }
     }
     // `route_layer` on a router with no routes panics by design, so a host that
     // serves no capability merges nothing at all.
-    if mounted == 0 {
-        return routes.with_state(state.clone());
+    if mounted > 0 {
+        routes = routes
+            .route_layer(api_key_layer(ApiKey::from_config(&state.config)))
+            .layer(DefaultBodyLimit::max(MAX_CAPABILITY_BODY_BYTES));
     }
-    routes
-        .route_layer(api_key_layer(ApiKey::from_config(&state.config)))
-        .layer(DefaultBodyLimit::max(MAX_CAPABILITY_BODY_BYTES))
-        .with_state(state.clone())
+    if audio_mounted > 0 {
+        audio = audio
+            .route_layer(api_key_layer(ApiKey::from_config(&state.config)))
+            .layer(DefaultBodyLimit::max(MAX_AUDIO_BODY_BYTES));
+    }
+    routes.merge(audio).with_state(state.clone())
 }
 
 /// `POST /v1/embeddings` — forwarded to the engine.
@@ -96,7 +119,7 @@ async fn forward(
     };
     match app.worker.forward(capability, request).await {
         Ok(response) => engine_response(response),
-        Err(err) => forward_failure(capability, err),
+        Err(err) => forward_failure_response(capability, err),
     }
 }
 
@@ -122,7 +145,7 @@ fn engine_response(response: EngineResponse) -> Response {
 }
 
 /// A transport-level failure, in the OpenAI envelope the rest of the server uses.
-fn forward_failure(capability: Capability, err: WorkerError) -> Response {
+pub(crate) fn forward_failure_response(capability: Capability, err: WorkerError) -> Response {
     tracing::warn!(capability = %capability, error = %err, "capability forward failed");
     let retry = matches!(err, WorkerError::Unavailable(_));
     let mut response = ApiError::from(err).into_response();
@@ -246,5 +269,147 @@ mod tests {
         let router = app(vec![Capability::Embedding], 200);
         let (status, _) = status_of(router, "/v1/rerank").await;
         assert_eq!(status, 404, "a route the engine cannot answer is absent");
+    }
+
+    /// A worker that answers every speech request with silence and counts calls,
+    /// so a chunked narration can be checked end to end.
+    struct SpeechWorker {
+        calls: std::sync::atomic::AtomicUsize,
+        status: u16,
+    }
+
+    impl SpeechWorker {
+        fn new(status: u16) -> Self {
+            Self {
+                calls: std::sync::atomic::AtomicUsize::new(0),
+                status,
+            }
+        }
+    }
+
+    const SILENCE_SAMPLES: usize = 240; // 10 ms at 24 kHz, mono, 16-bit
+
+    #[async_trait::async_trait]
+    impl Worker for SpeechWorker {
+        async fn models(&self) -> Result<Vec<ModelRecord>, WorkerError> {
+            Ok(Vec::new())
+        }
+        async fn generate(&self, _req: GenerateRequest) -> Result<GenerateStream, WorkerError> {
+            Err(WorkerError::Unavailable("not a chat worker".to_owned()))
+        }
+        fn capabilities(&self) -> &[Capability] {
+            &[Capability::Speech]
+        }
+        async fn ping(&self) -> Result<(), WorkerError> {
+            Ok(())
+        }
+        fn status(&self) -> crate::worker::WorkerStatus {
+            crate::worker::WorkerStatus::Up
+        }
+        async fn forward(
+            &self,
+            capability: Capability,
+            _request: EngineRequest,
+        ) -> Result<EngineResponse, WorkerError> {
+            assert_eq!(capability, Capability::Speech);
+            self.calls.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            if self.status != 200 {
+                return Ok(EngineResponse {
+                    status: self.status,
+                    content_type: Some("application/json".to_owned()),
+                    body: Bytes::from_static(b"{\"error\":\"shed\"}"),
+                });
+            }
+            let wav = crate::http::audio::build_wav(
+                crate::http::audio::WavFormat {
+                    channels: 1,
+                    sample_rate: 24_000,
+                    bits_per_sample: 16,
+                },
+                &vec![0u8; SILENCE_SAMPLES * 2],
+            );
+            Ok(EngineResponse {
+                status: 200,
+                content_type: Some("audio/wav".to_owned()),
+                body: Bytes::from(wav),
+            })
+        }
+    }
+
+    fn speech_app(worker: Arc<SpeechWorker>) -> axum::Router {
+        let mut config = Config::from_env(&std::collections::HashMap::new()).expect("defaults");
+        config.auth_enabled = false;
+        let state = AppState::new(config, worker as Arc<dyn Worker>);
+        crate::http::router(state)
+    }
+
+    async fn speech(
+        router: axum::Router,
+        input: &str,
+    ) -> (StatusCode, axum::http::HeaderMap, usize) {
+        let body = serde_json::json!({ "input": input, "voice": "af_heart" }).to_string();
+        let response = router
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/v1/audio/speech")
+                    .header(header::CONTENT_TYPE, "application/json")
+                    .body(Body::from(body))
+                    .expect("request"),
+            )
+            .await
+            .expect("response");
+        let status = response.status();
+        let headers = response.headers().clone();
+        let bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("body");
+        (status, headers, bytes.len())
+    }
+
+    #[tokio::test]
+    async fn a_short_speech_request_is_one_engine_call() {
+        let worker = Arc::new(SpeechWorker::new(200));
+        let (status, headers, len) = speech(speech_app(worker.clone()), "Hello there.").await;
+        assert_eq!(status, 200);
+        assert_eq!(worker.calls.load(std::sync::atomic::Ordering::SeqCst), 1);
+        assert_eq!(headers.get("x-sample-rate").unwrap(), "24000");
+        assert_eq!(len, 44 + SILENCE_SAMPLES * 2);
+    }
+
+    #[tokio::test]
+    async fn a_long_narration_is_chunked_and_concatenated() {
+        let worker = Arc::new(SpeechWorker::new(200));
+        // 120 sentences of ~40 characters: far past the 4096-character cap.
+        let input = "The quick brown fox jumps over it. ".repeat(120);
+        assert!(input.chars().count() > crate::http::audio::MAX_SPEECH_INPUT_CHARS);
+        let (status, headers, len) = speech(speech_app(worker.clone()), &input).await;
+        let calls = worker.calls.load(std::sync::atomic::Ordering::SeqCst);
+        assert_eq!(status, 200);
+        assert!(
+            calls > 1,
+            "a long narration must be split, got {calls} call(s)"
+        );
+        // One WAV around every chunk's PCM, not several WAVs concatenated.
+        assert_eq!(len, 44 + calls * SILENCE_SAMPLES * 2);
+        let duration: f64 = headers
+            .get("x-duration-sec")
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .parse()
+            .unwrap();
+        let expected = (calls * SILENCE_SAMPLES) as f64 / 24_000.0;
+        assert!(
+            (duration - expected).abs() < 0.01,
+            "duration {duration} vs {expected}"
+        );
+    }
+
+    #[tokio::test]
+    async fn a_shed_speech_request_keeps_the_engines_503() {
+        let worker = Arc::new(SpeechWorker::new(503));
+        let (status, _, _) = speech(speech_app(worker), "Hello there.").await;
+        assert_eq!(status, 503);
     }
 }

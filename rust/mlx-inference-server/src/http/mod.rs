@@ -6,6 +6,7 @@
 
 pub mod admission;
 pub mod anthropic;
+pub mod audio;
 pub mod capabilities;
 pub mod chat;
 pub mod health;

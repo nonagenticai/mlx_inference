@@ -39,9 +39,26 @@ fi
 grep -q 'legacy_mask_uses_fused_kernel' \
   "$SRC/src/lib/mlxcel-core/src/layers.rs" \
   || { echo "$SRC does not carry the Metal attention chunk-gate patch" >&2; exit 1; }
-grep -q 'MLXCEL_PREBUILT_METALLIB' \
-  "$SRC/src/lib/mlxcelverse/overlays/metal/mlx/backend/metal/kernels/CMakeLists.txt" \
-  || { echo "$SRC is missing the prebuilt-metallib build overlay" >&2; exit 1; }
+
+# The prebuilt-metallib overlay is a separate hunk pair from the Rust gate, and
+# a checkout can carry one without the other: a clone whose HEAD predates these
+# hunks passes the grep above and still cannot build without Xcode. Apply just
+# those two files when they are missing.
+OVERLAY="$SRC/src/lib/mlxcelverse/overlays/metal/mlx/backend/metal/kernels/CMakeLists.txt"
+if [ ! -f "$OVERLAY" ] || ! grep -q 'MLXCEL_PREBUILT_METALLIB' "$OVERLAY"; then
+  echo "applying the prebuilt-metallib overlay from $(basename "$PATCH") ..." >&2
+  git -C "$SRC" apply \
+    --include='src/lib/mlxcelverse/overlays/metal/mlx/backend/metal/kernels/CMakeLists.txt' \
+    --include='src/lib/mlxcelverse/CMakeLists.txt' \
+    "$PATCH" || {
+      echo "the overlay hunk does not apply to this tree — register" >&2
+      echo '  "mlx/backend/metal/kernels/CMakeLists.txt"' >&2
+      echo "in _metal_patch_files in $SRC/src/lib/mlxcelverse/CMakeLists.txt by hand" >&2
+      exit 1
+    }
+fi
+grep -q 'kernels/CMakeLists.txt' "$SRC/src/lib/mlxcelverse/CMakeLists.txt" \
+  || { echo "$SRC does not register the prebuilt-metallib overlay" >&2; exit 1; }
 [ -f "$METALLIB" ] || {
   echo "prebuilt metallib not found at $METALLIB" >&2
   echo "install the matching artifact: brew install lablup/tap/mlxcel" >&2
@@ -81,14 +98,18 @@ EOF
 chmod +x "$SHIM/xcrun"
 
 echo "building patched mlxcel in $SRC (this takes tens of minutes)..." >&2
+# The estate rule is that every repo on this box builds through cargo-guard, so
+# one shared target directory and two bounded slots are kept machine-wide.
+GUARD="${CARGO_GUARD:-$HOME/.claude/scripts/cargo-guard.py}"
+[ -x "$GUARD" ] || { echo "cargo-guard not found at $GUARD" >&2; exit 1; }
 (
   cd "$SRC"
   PATH="$SHIM:$PATH" MACOSX_DEPLOYMENT_TARGET=14.0 \
     RUSTFLAGS="-C target-cpu=apple-m1" \
-    cargo build --release --features metal,accelerate
+    "$GUARD" build --release --features metal,accelerate
 ) >&2
 
-TARGET="$SRC/target/release"
+TARGET="$("$GUARD" --print-target)/release"
 [ -x "$TARGET/mlxcel-server" ] || {
   echo "build produced no $TARGET/mlxcel-server" >&2
   exit 1
