@@ -312,8 +312,7 @@ mod tests {
             _request: EngineRequest,
         ) -> Result<EngineResponse, WorkerError> {
             assert_eq!(capability, Capability::Speech);
-            self.calls
-                .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            self.calls.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
             if self.status != 200 {
                 return Ok(EngineResponse {
                     status: self.status,
@@ -344,7 +343,10 @@ mod tests {
         crate::http::router(state)
     }
 
-    async fn speech(router: axum::Router, input: &str) -> (StatusCode, axum::http::HeaderMap, usize) {
+    async fn speech(
+        router: axum::Router,
+        input: &str,
+    ) -> (StatusCode, axum::http::HeaderMap, usize) {
         let body = serde_json::json!({ "input": input, "voice": "af_heart" }).to_string();
         let response = router
             .oneshot(
@@ -384,7 +386,10 @@ mod tests {
         let (status, headers, len) = speech(speech_app(worker.clone()), &input).await;
         let calls = worker.calls.load(std::sync::atomic::Ordering::SeqCst);
         assert_eq!(status, 200);
-        assert!(calls > 1, "a long narration must be split, got {calls} call(s)");
+        assert!(
+            calls > 1,
+            "a long narration must be split, got {calls} call(s)"
+        );
         // One WAV around every chunk's PCM, not several WAVs concatenated.
         assert_eq!(len, 44 + calls * SILENCE_SAMPLES * 2);
         let duration: f64 = headers
@@ -395,7 +400,10 @@ mod tests {
             .parse()
             .unwrap();
         let expected = (calls * SILENCE_SAMPLES) as f64 / 24_000.0;
-        assert!((duration - expected).abs() < 0.01, "duration {duration} vs {expected}");
+        assert!(
+            (duration - expected).abs() < 0.01,
+            "duration {duration} vs {expected}"
+        );
     }
 
     #[tokio::test]
