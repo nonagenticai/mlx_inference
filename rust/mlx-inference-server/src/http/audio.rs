@@ -321,31 +321,97 @@ pub(crate) fn push_silence(pcm: &mut Vec<u8>, format: &WavFormat, seconds: f64) 
 
 /// One engine piece per sentence, each at most `CHUNK_TARGET_CHARS`.
 ///
-/// A sentence longer than the target is cut on whitespace, not dropped: the
-/// engine's phoneme cap rejects the whole request otherwise.
+/// The split is the reference's `_SENT_RE`: punctuation followed by WHITESPACE.
+/// Splitting on every `.` instead costs real narration — "Wait... that is not the
+/// whole story." became five pieces and 1.2 s of inserted silence against the
+/// reference's two pieces and 0.46 s — and "Version 2.0.1 ships on 2026-11-13"
+/// shreds at every dot that is not a sentence end at all.
+///
+/// A boundary whose left side ends in a known abbreviation, a dotted letter chain
+/// ("e.g.", "U.S.") or a single capital initial is suppressed, exactly as
+/// `_NO_SPLIT_AFTER_RE` suppresses it: "Dr. Smith" must not become two utterances
+/// with a hole and a prosody restart in the middle of a name.
 pub fn sentence_pieces(text: &str) -> Vec<String> {
-    let mut sentences: Vec<String> = Vec::new();
-    let mut current = String::new();
-    for ch in text.chars() {
-        current.push(ch);
-        if matches!(ch, '.' | '!' | '?' | '\n') {
-            sentences.push(std::mem::take(&mut current));
-        }
-    }
-    if !current.trim().is_empty() {
-        sentences.push(current);
-    }
-
     let mut pieces = Vec::new();
-    for sentence in sentences {
-        for piece in hard_split(&sentence, CHUNK_TARGET_CHARS) {
-            let piece = piece.trim();
-            if !piece.is_empty() {
-                pieces.push(piece.to_owned());
+    let mut start = 0usize;
+    let bytes = text.as_bytes();
+    let mut index = 0usize;
+    while index < bytes.len() {
+        let ch = bytes[index] as char;
+        if matches!(ch, '.' | '!' | '?') {
+            // The boundary is the whitespace AFTER the punctuation run.
+            let mut end = index + 1;
+            while end < bytes.len() && matches!(bytes[end] as char, '.' | '!' | '?') {
+                end += 1;
             }
+            if end < bytes.len() && (bytes[end] as char).is_whitespace() {
+                let left = &text[start..end];
+                if !suppress_boundary(left) {
+                    push_piece(&mut pieces, left);
+                    start = end;
+                    while start < bytes.len() && (bytes[start] as char).is_whitespace() {
+                        start += 1;
+                    }
+                }
+            }
+            index = end;
+            continue;
+        }
+        index += 1;
+    }
+    push_piece(&mut pieces, &text[start..]);
+    pieces
+}
+
+/// Trim and split `piece` to the engine's caps, then keep it if anything is left.
+fn push_piece(pieces: &mut Vec<String>, piece: &str) {
+    for part in hard_split(piece, CHUNK_TARGET_CHARS) {
+        let part = part.trim();
+        if !part.is_empty() {
+            pieces.push(part.to_owned());
         }
     }
-    pieces
+}
+
+/// The reference's `_NO_SPLIT_AFTER_RE`: is this boundary really a sentence end?
+fn suppress_boundary(left: &str) -> bool {
+    const ABBREVIATIONS: &[&str] = &[
+        "Dr", "Mr", "Mrs", "Ms", "Mx", "Prof", "Rev", "Hon", "Sr", "Jr", "St", "Capt", "Col",
+        "Gen", "Lt", "Sgt", "Messrs", "Fig", "Figs", "No", "Nos", "Vol", "Vols", "Ch", "Sec", "Eq",
+        "Ref", "Refs", "pp", "Ed", "Eds", "Op", "Mt", "Inc", "Ltd", "Co", "Corp", "Dept", "Univ",
+        "Est", "Assn", "Bros", "vs", "etc", "al", "cf", "ca", "approx", "viz", "ibid",
+    ];
+    let trimmed = left.trim_end();
+    let Some(stem) = trimmed.strip_suffix('.') else {
+        return false;
+    };
+    // Only the LAST token matters: "Use e.g." is suppressed because `e.g` is a
+    // dotted chain, not because the whole clause looks unusual. The token is cut
+    // at whitespace or an opening quote/bracket — the positions the reference's
+    // regex allows before an abbreviation.
+    let token = stem
+        .rsplit(|ch: char| ch.is_whitespace() || matches!(ch, '(' | '[' | '"' | '\''))
+        .next()
+        .unwrap_or(stem);
+    if token.is_empty() {
+        return false;
+    }
+    // A dotted letter chain: "e.g", "U.S", "A.B.C".
+    let dotted: Vec<&str> = token.split('.').collect();
+    if dotted.len() >= 2
+        && dotted.iter().all(|part| {
+            part.chars().count() == 1 && part.chars().all(|ch| ch.is_ascii_alphabetic())
+        })
+    {
+        return true;
+    }
+    // A single capital initial: "J. Smith".
+    if token.chars().count() == 1 && token.chars().all(|ch| ch.is_ascii_uppercase()) {
+        return true;
+    }
+    // A listed abbreviation, itself preceded by start-of-text, whitespace or an
+    // opening bracket — so "Waterloo." never matches the listed "Co.".
+    ABBREVIATIONS.contains(&token)
 }
 
 /// Split text on sentence boundaries into pieces of at most `target` characters.
@@ -575,6 +641,42 @@ mod tests {
         for piece in &pieces {
             assert!(piece.chars().count() <= CHUNK_TARGET_CHARS);
         }
+    }
+
+    #[test]
+    fn an_ellipsis_is_one_boundary_not_three() {
+        let pieces = sentence_pieces("Wait... that is not the whole story.");
+        assert_eq!(
+            pieces,
+            vec!["Wait...", "that is not the whole story."],
+            "the reference makes two pieces here"
+        );
+    }
+
+    #[test]
+    fn a_version_and_a_date_do_not_split() {
+        let pieces = sentence_pieces("Version 2.0.1 ships on 2026-11-13 at 09:30.");
+        assert_eq!(
+            pieces,
+            vec!["Version 2.0.1 ships on 2026-11-13 at 09:30."],
+            "a dot with no whitespace after it is not a boundary"
+        );
+    }
+
+    #[test]
+    fn an_abbreviation_does_not_split() {
+        assert_eq!(
+            sentence_pieces("Dr. Smith arrived. Then he left."),
+            vec!["Dr. Smith arrived.", "Then he left."]
+        );
+        assert_eq!(
+            sentence_pieces("Use e.g. this one. Then stop."),
+            vec!["Use e.g. this one.", "Then stop."]
+        );
+        assert_eq!(
+            sentence_pieces("J. Smith wrote it."),
+            vec!["J. Smith wrote it."]
+        );
     }
 
     #[test]
