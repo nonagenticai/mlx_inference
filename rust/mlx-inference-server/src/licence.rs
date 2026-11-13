@@ -195,7 +195,12 @@ fn list_env(name: &str, default: &[&str]) -> Vec<String> {
 /// half-configured client must not silently become a 503 on every call.
 fn keycloak_token_url() -> Option<String> {
     let base = non_empty(std::env::var("KEYCLOAK_URL").ok())?;
-    let realm = non_empty(std::env::var("KEYCLOAK_REALM").ok())?;
+    // The service client lives in `KEYCLOAK_SERVICE_REALM` (realm-per-app:
+    // `secure-apps`), NOT in the portal realm the users log into. Minting against
+    // the wrong realm answers 401 and every gated request then loses its lookup —
+    // which is exactly how this shipped wrong the first time.
+    let realm = non_empty(std::env::var("KEYCLOAK_SERVICE_REALM").ok())
+        .or_else(|| non_empty(std::env::var("KEYCLOAK_REALM").ok()))?;
     Some(format!(
         "{}/realms/{realm}/protocol/openid-connect/token",
         base.trim_end_matches('/')
@@ -398,7 +403,7 @@ impl LicenceGate {
         // once per accepted app key, and fold the answers.
         let mut verdicts = Vec::with_capacity(self.config.app_keys.len());
         for app_key in &self.config.app_keys {
-            match self.lookup(&tenant_id, app_key).await {
+            match self.lookup(&tenant_id, app_key, &token).await {
                 Ok(record) => verdicts.push(record),
                 Err(error) => return Err(error),
             }
@@ -474,20 +479,35 @@ impl LicenceGate {
     // it unchanged; boxing it would only move the allocation onto the deny path,
     // which is the one path that must stay cheap. Same call as `http::audio::call`.
     #[allow(clippy::result_large_err)]
-    async fn lookup(&self, tenant_id: &str, app_key: &str) -> Result<LicenceRecord, Response> {
-        let (Some(client_id), Some(client_secret), Some(token_url)) = (
-            self.config.client_id.as_deref(),
-            self.config.client_secret.as_deref(),
-            self.config.token_url.as_deref(),
-        ) else {
-            return Err(unavailable(
-                "no client credentials configured for the licence lookup",
-            ));
+    async fn lookup(
+        &self,
+        tenant_id: &str,
+        app_key: &str,
+        presented_token: &str,
+    ) -> Result<LicenceRecord, Response> {
+        // The bearer is the CALLER's own licence token when there is one — the
+        // licences service then answers about the tenant that token belongs to,
+        // which is exactly the question being asked. A service-account token is
+        // only the fallback: that account is routinely refused for a tenant it
+        // does not "own", and a 403 there is a misconfiguration, not a refusal
+        // (measured 2026-11-13: both the gateway's tenant and a tool tenant
+        // answer `tenant_not_accessible` to the service account).
+        let token = if !presented_token.trim().is_empty() {
+            presented_token.to_owned()
+        } else {
+            let (Some(client_id), Some(client_secret), Some(token_url)) = (
+                self.config.client_id.as_deref(),
+                self.config.client_secret.as_deref(),
+                self.config.token_url.as_deref(),
+            ) else {
+                return Err(unavailable(
+                    "no client credentials configured for the licence lookup",
+                ));
+            };
+            self.service_token(token_url, client_id, client_secret)
+                .await
+                .map_err(|_| unavailable("could not mint a service token for the licence lookup"))?
         };
-        let token = self
-            .service_token(token_url, client_id, client_secret)
-            .await
-            .map_err(|_| unavailable("could not mint a service token for the licence lookup"))?;
         // `.query()` and `.form()` are not in this build of reqwest (it is
         // compiled without the urlencoded feature), and a whole new dependency
         // for two short parameters is not worth it: both values are a tenant
