@@ -218,7 +218,6 @@ pub enum ConfigError {
     InvalidMlxcelPort(String),
     InvalidMlxcelTimeout(String),
     InvalidCapability(String),
-    UnsupportedCapability(Capability),
 }
 
 impl fmt::Display for ConfigError {
@@ -239,11 +238,6 @@ impl fmt::Display for ConfigError {
             Self::InvalidCapability(value) => write!(
                 f,
                 "invalid MLXCEL_CAPABILITIES entry {value:?}: expected one of chat, embedding, rerank"
-            ),
-            Self::UnsupportedCapability(cap) => write!(
-                f,
-                "MLXCEL_CAPABILITIES={cap} is not available in the pinned engine build: \
-                 it cannot load a {cap} checkpoint (mlx_inference#6)"
             ),
         }
     }
@@ -307,10 +301,10 @@ fn split_list(raw: &str) -> Vec<String> {
 /// that holds an embedding model but must not answer `/v1/embeddings`) or
 /// *widen* them to chat, and nothing else.
 ///
-/// Audio capabilities are rejected rather than mounted: the engine build this
-/// server currently pins cannot load a Kokoro or Whisper checkpoint, so enabling
-/// them here would advertise a route that dies at startup
-/// (`docs/`, `mlx_inference` issue #6).
+/// Audio capabilities are opt-in only. The engine serves Kokoro and Whisper as
+/// the *primary* checkpoint rather than beside the chat model, so a host that
+/// lists `speech` or `transcription` is a host whose `MLXCEL_MODEL` names that
+/// audio checkpoint. There is no default that could pick it for you.
 fn parse_capabilities(
     raw: Option<&str>,
     has_embedding: bool,
@@ -331,12 +325,6 @@ fn parse_capabilities(
     for part in split_list(raw) {
         let cap =
             Capability::parse(&part).ok_or_else(|| ConfigError::InvalidCapability(part.clone()))?;
-        if !matches!(
-            cap,
-            Capability::Chat | Capability::Embedding | Capability::Rerank
-        ) {
-            return Err(ConfigError::UnsupportedCapability(cap));
-        }
         if !caps.contains(&cap) {
             caps.push(cap);
         }
@@ -518,13 +506,13 @@ mod tests {
     }
 
     #[test]
-    fn unknown_and_unavailable_capabilities_are_rejected() {
+    fn unknown_capabilities_are_rejected_and_audio_is_opt_in() {
         let err =
             Config::from_env(&env(&[("MLXCEL_CAPABILITIES", "vision")])).expect_err("rejected");
         assert_eq!(err, ConfigError::InvalidCapability("vision".to_owned()));
 
-        let err =
-            Config::from_env(&env(&[("MLXCEL_CAPABILITIES", "speech")])).expect_err("rejected");
-        assert_eq!(err, ConfigError::UnsupportedCapability(Capability::Speech));
+        let cfg = Config::from_env(&env(&[("MLXCEL_CAPABILITIES", "speech")]))
+            .expect("speech is an explicit opt-in");
+        assert_eq!(cfg.mlxcel_capabilities, vec![Capability::Speech]);
     }
 }

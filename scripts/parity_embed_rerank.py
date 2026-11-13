@@ -47,11 +47,15 @@ def cosine(a: list[float], b: list[float]) -> float:
     return dot / (na * nb) if na and nb else 0.0
 
 
-def embed_all(base: str, passages: list[str], key: str, batch: int = 8) -> list[list[float]]:
+def embed_all(
+    base: str, passages: list[str], key: str, model: str, batch: int = 8
+) -> list[list[float]]:
     out: list[list[float]] = []
     for i in range(0, len(passages), batch):
         chunk = passages[i : i + batch]
-        body = post(f"{base}/v1/embeddings", {"input": chunk}, key)
+        # mlx_api requires `model`; mlx_inference drops it and lets the engine
+        # name the checkpoint it serves, so the same body works on both.
+        body = post(f"{base}/v1/embeddings", {"model": model, "input": chunk}, key)
         rows = sorted(body["data"], key=lambda d: d["index"])
         out.extend(row["embedding"] for row in rows)
     return out
@@ -65,6 +69,8 @@ def main() -> int:
     ap.add_argument("--corpus", required=True)
     ap.add_argument("--queries", type=int, default=10)
     ap.add_argument("--docs-per-query", type=int, default=30)
+    ap.add_argument("--embed-model", default="BAAI/bge-m3")
+    ap.add_argument("--rerank-model", default="BAAI/bge-reranker-v2-m3")
     args = ap.parse_args()
 
     key = pathlib.Path(args.key_file).read_text().strip()
@@ -78,8 +84,8 @@ def main() -> int:
         return 2
     passages = passages[:400]
 
-    old_vecs = embed_all(args.old, passages, key)
-    new_vecs = embed_all(args.new, passages, key)
+    old_vecs = embed_all(args.old, passages, key, args.embed_model)
+    new_vecs = embed_all(args.new, passages, key, args.embed_model)
     sims = [cosine(o, n) for o, n in zip(old_vecs, new_vecs)]
     d_old, d_new = len(old_vecs[0]), len(new_vecs[0])
     worst = min(sims)
@@ -102,8 +108,8 @@ def main() -> int:
         docs = passages[q + 1 : q + 1 + args.docs_per_query]
         if len(docs) < 5:
             continue
-        old = post(f"{args.old}/v2/rerank", {"query": query, "documents": docs, "top_n": 10}, key)
-        new = post(f"{args.new}/v1/rerank", {"query": query, "documents": docs, "top_n": 10}, key)
+        old = post(f"{args.old}/v2/rerank", {"model": args.rerank_model, "query": query, "documents": docs, "top_n": 10}, key)
+        new = post(f"{args.new}/v1/rerank", {"model": args.rerank_model, "query": query, "documents": docs, "top_n": 10}, key)
         old_idx = [r["index"] for r in old["results"]]
         new_idx = [r["index"] for r in new["results"]]
         if old_idx != new_idx:
