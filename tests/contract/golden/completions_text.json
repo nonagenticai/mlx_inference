@@ -1,0 +1,41 @@
+{
+  "name": "completions_text",
+  "mode": "schema",
+  "request": {
+    "method": "POST",
+    "path": "/v1/completions",
+    "json": {
+      "model": "mlx-community/AREX-2-6bit",
+      "prompt": "Say pong",
+      "max_tokens": 8
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "id": "cmpl-NORM",
+      "object": "text_completion",
+      "created": 0,
+      "model": "mlx-community/AREX-2-6bit",
+      "choices": [
+        {
+          "text": "We need to respond to the user's",
+          "index": 0,
+          "logprobs": null,
+          "finish_reason": "length"
+        }
+      ],
+      "usage": {
+        "prompt_tokens": 0,
+        "completion_tokens": 0,
+        "total_tokens": 0,
+        "prompt_eval_tokens_per_second": 0,
+        "eval_tokens_per_second": 0
+      },
+      "system_fingerprint": "fp-NORM"
+    }
+  }
+}

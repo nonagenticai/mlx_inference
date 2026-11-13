@@ -1,0 +1,21 @@
+{
+  "name": "models_unknown",
+  "mode": "exact",
+  "request": {
+    "method": "GET",
+    "path": "/v1/models/nope/not-a-model"
+  },
+  "response": {
+    "status": 404,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "error": {
+        "message": "Model 'nope/not-a-model' not found",
+        "type": "not_found_error",
+        "code": "404"
+      }
+    }
+  }
+}

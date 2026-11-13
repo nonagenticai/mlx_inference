@@ -1,0 +1,52 @@
+name: Tests
+
+# This service is Rust end to end: `rust/mlx-inference-server` owns HTTP, auth,
+# validation, SSE, stats, metrics and the console, and supervises a native
+# `mlxcel-server` child for MLX inference. There is no Python runtime and no
+# container — MLX needs host Metal, so the gate runs on a macOS Apple Silicon
+# runner.
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  rust:
+    runs-on: macos-14
+    timeout-minutes: 45
+    env:
+      CARGO_INCREMENTAL: "0"
+    steps:
+      - uses: actions/checkout@v6.0.2
+
+      - name: Install the pinned toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: "1.99.1"
+          components: rustfmt, clippy
+
+      - name: Format
+        working-directory: rust
+        run: cargo fmt --check
+
+      - name: Clippy
+        working-directory: rust
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+      # Includes the mlxcel worker contract tests against a fake SSE peer, so
+      # the engine boundary is pinned without loading a model. The golden
+      # replay (`tests/contract.rs`) needs a live server with the checkpoint
+      # resident and is `#[ignore]`d here; it runs on a machine that has the
+      # model, via scripts/smoke_arex.sh and:
+      #   cargo test --test contract -- --ignored
+      - name: Tests
+        working-directory: rust
+        run: cargo test --workspace

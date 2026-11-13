@@ -1,0 +1,15 @@
+{
+  "name": "metrics",
+  "mode": "exact",
+  "request": {
+    "method": "GET",
+    "path": "/metrics"
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "text/plain; version=0.0.4; charset=utf-8"
+    },
+    "body": "# HELP mlx_inference_requests_total Completed chat completion requests.\n# TYPE mlx_inference_requests_total counter\nmlx_inference_requests_total 10\n# HELP mlx_inference_prompt_tokens_total Prompt tokens processed.\n# TYPE mlx_inference_prompt_tokens_total counter\nmlx_inference_prompt_tokens_total 360\n# HELP mlx_inference_completion_tokens_total Generated tokens.\n# TYPE mlx_inference_completion_tokens_total counter\nmlx_inference_completion_tokens_total 99\n# HELP mlx_inference_ttft_seconds Time to first token of the last request.\n# TYPE mlx_inference_ttft_seconds gauge\nmlx_inference_ttft_seconds 0.8055\n# HELP mlx_inference_completion_tokens_per_second Generation speed of the last request.\n# TYPE mlx_inference_completion_tokens_per_second gauge\nmlx_inference_completion_tokens_per_second 11.1\n# HELP mlx_inference_peak_memory_gb Peak GPU memory of the last request.\n# TYPE mlx_inference_peak_memory_gb gauge\nmlx_inference_peak_memory_gb 21.6\n"
+  }
+}

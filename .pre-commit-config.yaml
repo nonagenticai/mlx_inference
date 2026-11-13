@@ -1,0 +1,57 @@
+# Pre-commit hooks for mlx_inference (Rust).
+# Install: pre-commit install -t pre-commit -t pre-push
+# Run all: pre-commit run --all-files
+#
+# The Rust gate also runs in CI (.github/workflows/tests.yml); pre-commit keeps
+# the language-agnostic hygiene hooks and runs the same cargo checks locally.
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      # Unified-diff context lines and captured wire bodies are byte-exact.
+      - id: trailing-whitespace
+        exclude: ^patches/.*\.patch$
+      - id: end-of-file-fixer
+        exclude: ^patches/.*\.patch$|^tests/contract/probes/
+      - id: check-yaml
+        args: [--unsafe]  # Allow custom tags
+      - id: check-added-large-files
+        args: [--maxkb=1024]
+      - id: check-merge-conflict
+      - id: detect-private-key
+
+  # Secret detection
+  - repo: https://github.com/Yelp/detect-secrets
+    rev: v1.5.0
+    hooks:
+      - id: detect-secrets
+        args: [--baseline, .secrets.baseline]
+        exclude: package-lock.json
+
+  # Rust formatting and lints run before a push.
+  - repo: local
+    hooks:
+      - id: cargo-fmt
+        name: cargo fmt
+        entry: cargo fmt --manifest-path rust/Cargo.toml --all -- --check
+        language: system
+        pass_filenames: false
+        files: \.rs$
+        stages: [pre-commit]
+
+      - id: cargo-clippy
+        name: cargo clippy (-D warnings)
+        entry: cargo clippy --manifest-path rust/Cargo.toml --workspace --all-targets -- -D warnings
+        language: system
+        pass_filenames: false
+        files: \.rs$
+        stages: [pre-push]
+
+      - id: cargo-test
+        name: cargo test (workspace)
+        entry: cargo test --manifest-path rust/Cargo.toml --workspace
+        language: system
+        pass_filenames: false
+        files: \.rs$
+        stages: [pre-push]

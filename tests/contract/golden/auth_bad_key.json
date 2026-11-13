@@ -1,0 +1,23 @@
+{
+  "name": "auth_bad_key",
+  "mode": "exact",
+  "request": {
+    "method": "GET",
+    "path": "/v1/models",
+    "headers": {
+      "Authorization": "Bearer wrong-key"
+    }
+  },
+  "response": {
+    "status": 500,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "error": {
+        "message": "Authentication service error",
+        "status": 500
+      }
+    }
+  }
+}

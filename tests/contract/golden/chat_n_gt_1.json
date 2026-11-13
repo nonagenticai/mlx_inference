@@ -1,0 +1,32 @@
+{
+  "name": "chat_n_gt_1",
+  "mode": "exact",
+  "request": {
+    "method": "POST",
+    "path": "/v1/chat/completions",
+    "json": {
+      "model": "mlx-community/AREX-2-6bit",
+      "n": 2,
+      "messages": [
+        {
+          "role": "user",
+          "content": "hi"
+        }
+      ]
+    }
+  },
+  "response": {
+    "status": 422,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "error": {
+        "message": "n: Input should be less than or equal to 1",
+        "type": "invalid_request_error",
+        "code": "invalid_request",
+        "param": "n"
+      }
+    }
+  }
+}

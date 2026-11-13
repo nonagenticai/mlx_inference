@@ -1,0 +1,12 @@
+{
+  "name": "completions_text",
+  "request": {
+    "method": "POST",
+    "path": "/v1/completions",
+    "json": {
+      "model": "mlx-community/AREX-2-6bit",
+      "prompt": "Say pong",
+      "max_tokens": 8
+    }
+  }
+}

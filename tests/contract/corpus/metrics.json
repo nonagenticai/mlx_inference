@@ -1,0 +1,7 @@
+{
+  "name": "metrics",
+  "request": {
+    "method": "GET",
+    "path": "/metrics"
+  }
+}

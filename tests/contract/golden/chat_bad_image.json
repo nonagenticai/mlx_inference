@@ -1,0 +1,39 @@
+{
+  "name": "chat_bad_image",
+  "mode": "exact",
+  "request": {
+    "method": "POST",
+    "path": "/v1/chat/completions",
+    "json": {
+      "model": "mlx-community/AREX-2-6bit",
+      "max_tokens": 8,
+      "messages": [
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "image_url",
+              "image_url": {
+                "url": "data:image/png;base64,bm90YXBuZw=="
+              }
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "response": {
+    "status": 400,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "error": {
+        "message": "Unsupported image data: expected PNG, JPEG, WebP or GIF bytes",
+        "type": "invalid_request_error",
+        "code": "invalid_image",
+        "param": "messages"
+      }
+    }
+  }
+}

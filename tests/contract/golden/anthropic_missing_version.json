@@ -1,0 +1,34 @@
+{
+  "mode": "exact",
+  "name": "anthropic_missing_version",
+  "request": {
+    "json": {
+      "max_tokens": 32,
+      "messages": [
+        {
+          "content": "Reply with exactly: ready",
+          "role": "user"
+        }
+      ],
+      "model": "mlx-community/AREX-2-6bit",
+      "thinking": {
+        "type": "disabled"
+      }
+    },
+    "method": "POST",
+    "path": "/v1/messages"
+  },
+  "response": {
+    "body": {
+      "error": {
+        "message": "anthropic-version: header is required",
+        "type": "invalid_request_error"
+      },
+      "type": "error"
+    },
+    "headers": {
+      "content-type": "application/json"
+    },
+    "status": 400
+  }
+}

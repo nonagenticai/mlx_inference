@@ -1,0 +1,11 @@
+{
+  "name": "anthropic_models",
+  "mode": "exact",
+  "request": {
+    "method": "GET",
+    "path": "/v1/models",
+    "headers": {
+      "anthropic-version": "2023-06-01"
+    }
+  }
+}

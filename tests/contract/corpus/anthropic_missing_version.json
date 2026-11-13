@@ -1,0 +1,21 @@
+{
+  "name": "anthropic_missing_version",
+  "mode": "exact",
+  "request": {
+    "method": "POST",
+    "path": "/v1/messages",
+    "json": {
+      "model": "mlx-community/AREX-2-6bit",
+      "max_tokens": 32,
+      "thinking": {
+        "type": "disabled"
+      },
+      "messages": [
+        {
+          "role": "user",
+          "content": "Reply with exactly: ready"
+        }
+      ]
+    }
+  }
+}

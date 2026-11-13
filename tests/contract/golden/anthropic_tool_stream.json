@@ -1,0 +1,203 @@
+{
+  "mode": "schema",
+  "name": "anthropic_tool_stream",
+  "request": {
+    "headers": {
+      "anthropic-version": "2023-06-01"
+    },
+    "json": {
+      "max_tokens": 128,
+      "messages": [
+        {
+          "content": "Check the delivery status of order 1234. Use the get_order_status tool.",
+          "role": "user"
+        }
+      ],
+      "model": "mlx-community/AREX-2-6bit",
+      "stream": true,
+      "system": "You are a customer-care assistant. Use the tools you are given.",
+      "thinking": {
+        "type": "disabled"
+      },
+      "tool_choice": {
+        "type": "any"
+      },
+      "tools": [
+        {
+          "description": "Look up the delivery status for a customer order.",
+          "input_schema": {
+            "properties": {
+              "order_id": {
+                "description": "The order id",
+                "type": "string"
+              }
+            },
+            "required": [
+              "order_id"
+            ],
+            "type": "object"
+          },
+          "name": "get_order_status"
+        }
+      ]
+    },
+    "method": "POST",
+    "path": "/v1/messages"
+  },
+  "response": {
+    "frames": [
+      {
+        "data": {
+          "message": {
+            "content": [],
+            "id": "msg_fc5054230ba85a1900000000",
+            "model": "mlx-community/AREX-2-6bit",
+            "role": "assistant",
+            "stop_reason": null,
+            "stop_sequence": null,
+            "type": "message",
+            "usage": {
+              "input_tokens": 0,
+              "output_tokens": 0
+            }
+          },
+          "type": "message_start"
+        },
+        "event": "message_start"
+      },
+      {
+        "data": {
+          "content_block": {
+            "id": "toolu_6ec599fc876f18c200000000",
+            "input": {},
+            "name": "get_order_status",
+            "type": "tool_use"
+          },
+          "index": 0,
+          "type": "content_block_start"
+        },
+        "event": "content_block_start"
+      },
+      {
+        "data": {
+          "delta": {
+            "partial_json": "{",
+            "type": "input_json_delta"
+          },
+          "index": 0,
+          "type": "content_block_delta"
+        },
+        "event": "content_block_delta"
+      },
+      {
+        "data": {
+          "delta": {
+            "partial_json": "\"order_id\":\"",
+            "type": "input_json_delta"
+          },
+          "index": 0,
+          "type": "content_block_delta"
+        },
+        "event": "content_block_delta"
+      },
+      {
+        "data": {
+          "delta": {
+            "partial_json": "1",
+            "type": "input_json_delta"
+          },
+          "index": 0,
+          "type": "content_block_delta"
+        },
+        "event": "content_block_delta"
+      },
+      {
+        "data": {
+          "delta": {
+            "partial_json": "2",
+            "type": "input_json_delta"
+          },
+          "index": 0,
+          "type": "content_block_delta"
+        },
+        "event": "content_block_delta"
+      },
+      {
+        "data": {
+          "delta": {
+            "partial_json": "3",
+            "type": "input_json_delta"
+          },
+          "index": 0,
+          "type": "content_block_delta"
+        },
+        "event": "content_block_delta"
+      },
+      {
+        "data": {
+          "delta": {
+            "partial_json": "4",
+            "type": "input_json_delta"
+          },
+          "index": 0,
+          "type": "content_block_delta"
+        },
+        "event": "content_block_delta"
+      },
+      {
+        "data": {
+          "delta": {
+            "partial_json": "\"",
+            "type": "input_json_delta"
+          },
+          "index": 0,
+          "type": "content_block_delta"
+        },
+        "event": "content_block_delta"
+      },
+      {
+        "data": {
+          "delta": {
+            "partial_json": "}",
+            "type": "input_json_delta"
+          },
+          "index": 0,
+          "type": "content_block_delta"
+        },
+        "event": "content_block_delta"
+      },
+      {
+        "data": {
+          "index": 0,
+          "type": "content_block_stop"
+        },
+        "event": "content_block_stop"
+      },
+      {
+        "data": {
+          "delta": {
+            "stop_reason": "tool_use",
+            "stop_sequence": null
+          },
+          "type": "message_delta",
+          "usage": {
+            "output_tokens": 30
+          }
+        },
+        "event": "message_delta"
+      },
+      {
+        "data": {
+          "type": "message_stop"
+        },
+        "event": "message_stop"
+      }
+    ],
+    "headers": {
+      "cache-control": "no-cache",
+      "content-type": "text/event-stream; charset=utf-8",
+      "x-accel-buffering": "no"
+    },
+    "status": 200
+  }
+}

@@ -1,0 +1,48 @@
+{
+  "mode": "schema",
+  "name": "anthropic_text",
+  "request": {
+    "headers": {
+      "anthropic-version": "2023-06-01"
+    },
+    "json": {
+      "max_tokens": 32,
+      "messages": [
+        {
+          "content": "Reply with exactly: ready",
+          "role": "user"
+        }
+      ],
+      "model": "mlx-community/AREX-2-6bit",
+      "thinking": {
+        "type": "disabled"
+      }
+    },
+    "method": "POST",
+    "path": "/v1/messages"
+  },
+  "response": {
+    "body": {
+      "content": [
+        {
+          "text": "ready",
+          "type": "text"
+        }
+      ],
+      "id": "msg_590a70f7611d934000000000",
+      "model": "mlx-community/AREX-2-6bit",
+      "role": "assistant",
+      "stop_reason": "end_turn",
+      "stop_sequence": null,
+      "type": "message",
+      "usage": {
+        "input_tokens": 17,
+        "output_tokens": 1
+      }
+    },
+    "headers": {
+      "content-type": "application/json"
+    },
+    "status": 200
+  }
+}

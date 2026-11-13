@@ -1,0 +1,229 @@
+{
+  "name": "stats",
+  "mode": "exact",
+  "request": {
+    "method": "GET",
+    "path": "/v1/stats"
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "requests": [
+        {
+          "prompt_tokens": 0,
+          "completion_tokens": 0,
+          "total_tokens": 0,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          },
+          "completion_tokens_details": {
+            "reasoning_tokens": 0
+          },
+          "ttft_ms": 0,
+          "prompt_tps": 0,
+          "completion_tps": 0,
+          "total_ms": 0,
+          "draft_acceptance": null,
+          "id": "chatcmpl-NORM",
+          "model": "mlx-community/AREX-2-6bit",
+          "created": 0,
+          "finish_reason": "length",
+          "peak_memory_gb": 21.6
+        },
+        {
+          "prompt_tokens": 0,
+          "completion_tokens": 0,
+          "total_tokens": 0,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          },
+          "completion_tokens_details": {
+            "reasoning_tokens": 0
+          },
+          "ttft_ms": 0,
+          "prompt_tps": 0,
+          "completion_tps": 0,
+          "total_ms": 0,
+          "draft_acceptance": null,
+          "id": "chatcmpl-NORM",
+          "model": "mlx-community/AREX-2-6bit",
+          "created": 0,
+          "finish_reason": "stop",
+          "peak_memory_gb": 21.6
+        },
+        {
+          "prompt_tokens": 0,
+          "completion_tokens": 0,
+          "total_tokens": 0,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          },
+          "completion_tokens_details": {
+            "reasoning_tokens": 0
+          },
+          "ttft_ms": 0,
+          "prompt_tps": 0,
+          "completion_tps": 0,
+          "total_ms": 0,
+          "draft_acceptance": null,
+          "id": "chatcmpl-NORM",
+          "model": "mlx-community/AREX-2-6bit",
+          "created": 0,
+          "finish_reason": "stop",
+          "peak_memory_gb": 21.6
+        },
+        {
+          "prompt_tokens": 0,
+          "completion_tokens": 0,
+          "total_tokens": 0,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          },
+          "completion_tokens_details": {
+            "reasoning_tokens": 0
+          },
+          "ttft_ms": 0,
+          "prompt_tps": 0,
+          "completion_tps": 0,
+          "total_ms": 0,
+          "draft_acceptance": null,
+          "id": "chatcmpl-NORM",
+          "model": "mlx-community/AREX-2-6bit",
+          "created": 0,
+          "finish_reason": "stop",
+          "peak_memory_gb": 21.6
+        },
+        {
+          "prompt_tokens": 0,
+          "completion_tokens": 0,
+          "total_tokens": 0,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          },
+          "completion_tokens_details": {
+            "reasoning_tokens": 0
+          },
+          "ttft_ms": 0,
+          "prompt_tps": 0,
+          "completion_tps": 0,
+          "total_ms": 0,
+          "draft_acceptance": null,
+          "id": "chatcmpl-NORM",
+          "model": "mlx-community/AREX-2-6bit",
+          "created": 0,
+          "finish_reason": "length",
+          "peak_memory_gb": 21.6
+        },
+        {
+          "prompt_tokens": 0,
+          "completion_tokens": 0,
+          "total_tokens": 0,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          },
+          "completion_tokens_details": {
+            "reasoning_tokens": 0
+          },
+          "ttft_ms": 0,
+          "prompt_tps": 0,
+          "completion_tps": 0,
+          "total_ms": 0,
+          "draft_acceptance": null,
+          "id": "chatcmpl-NORM",
+          "model": "mlx-community/AREX-2-6bit",
+          "created": 0,
+          "finish_reason": "length",
+          "peak_memory_gb": 21.6
+        },
+        {
+          "prompt_tokens": 0,
+          "completion_tokens": 0,
+          "total_tokens": 0,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          },
+          "completion_tokens_details": {
+            "reasoning_tokens": 0
+          },
+          "ttft_ms": 0,
+          "prompt_tps": 0,
+          "completion_tps": 0,
+          "total_ms": 0,
+          "draft_acceptance": null,
+          "id": "chatcmpl-NORM",
+          "model": "mlx-community/AREX-2-6bit",
+          "created": 0,
+          "finish_reason": "stop",
+          "peak_memory_gb": 21.6
+        },
+        {
+          "prompt_tokens": 0,
+          "completion_tokens": 0,
+          "total_tokens": 0,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          },
+          "completion_tokens_details": {
+            "reasoning_tokens": 0
+          },
+          "ttft_ms": 0,
+          "prompt_tps": 0,
+          "completion_tps": 0,
+          "total_ms": 0,
+          "draft_acceptance": null,
+          "id": "chatcmpl-NORM",
+          "model": "mlx-community/AREX-2-6bit",
+          "created": 0,
+          "finish_reason": "stop",
+          "peak_memory_gb": 21.6
+        },
+        {
+          "prompt_tokens": 0,
+          "completion_tokens": 0,
+          "total_tokens": 0,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          },
+          "completion_tokens_details": {
+            "reasoning_tokens": 0
+          },
+          "ttft_ms": 0,
+          "prompt_tps": 0,
+          "completion_tps": 0,
+          "total_ms": 0,
+          "draft_acceptance": null,
+          "id": "chatcmpl-NORM",
+          "model": "mlx-community/AREX-2-6bit",
+          "created": 0,
+          "finish_reason": "stop",
+          "peak_memory_gb": 21.6
+        },
+        {
+          "prompt_tokens": 0,
+          "completion_tokens": 0,
+          "total_tokens": 0,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          },
+          "completion_tokens_details": {
+            "reasoning_tokens": 0
+          },
+          "ttft_ms": 0,
+          "prompt_tps": 0,
+          "completion_tps": 0,
+          "total_ms": 0,
+          "draft_acceptance": null,
+          "id": "chatcmpl-NORM",
+          "model": "mlx-community/AREX-2-6bit",
+          "created": 0,
+          "finish_reason": "length",
+          "peak_memory_gb": 21.6
+        }
+      ],
+      "model": "mlx-community/AREX-2-6bit"
+    }
+  }
+}

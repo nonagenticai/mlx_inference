@@ -1,0 +1,23 @@
+{
+  "name": "auth_missing_key",
+  "mode": "exact",
+  "request": {
+    "method": "GET",
+    "path": "/v1/models",
+    "no_auth_header": true
+  },
+  "response": {
+    "status": 401,
+    "headers": {
+      "content-type": "application/json",
+      "www-authenticate": "Bearer"
+    },
+    "body": {
+      "error": {
+        "message": "Invalid or missing API key",
+        "type": "authentication_error",
+        "code": "401"
+      }
+    }
+  }
+}

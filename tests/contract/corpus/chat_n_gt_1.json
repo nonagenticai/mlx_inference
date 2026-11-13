@@ -1,0 +1,17 @@
+{
+  "name": "chat_n_gt_1",
+  "request": {
+    "method": "POST",
+    "path": "/v1/chat/completions",
+    "json": {
+      "model": "mlx-community/AREX-2-6bit",
+      "n": 2,
+      "messages": [
+        {
+          "role": "user",
+          "content": "hi"
+        }
+      ]
+    }
+  }
+}

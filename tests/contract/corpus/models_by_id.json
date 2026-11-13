@@ -1,0 +1,7 @@
+{
+  "name": "models_by_id",
+  "request": {
+    "method": "GET",
+    "path": "/v1/models/mlx-community/AREX-2-6bit"
+  }
+}

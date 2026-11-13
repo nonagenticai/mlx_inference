@@ -1,0 +1,19 @@
+{
+  "name": "chat_text_stream",
+  "request": {
+    "method": "POST",
+    "path": "/v1/chat/completions",
+    "json": {
+      "model": "mlx-community/AREX-2-6bit",
+      "max_tokens": 16,
+      "enable_thinking": false,
+      "stream": true,
+      "messages": [
+        {
+          "role": "user",
+          "content": "Say pong"
+        }
+      ]
+    }
+  }
+}

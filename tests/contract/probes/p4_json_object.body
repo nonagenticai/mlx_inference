@@ -1,0 +1,1 @@
+{"error":{"message":"invalid response_format: response_format type \"json_object\" is not supported; supply type=\"json_schema\" with a schema","type":"invalid_request_error","code":null}}

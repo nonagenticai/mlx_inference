@@ -1,0 +1,24 @@
+{
+  "name": "anthropic_text",
+  "mode": "schema",
+  "request": {
+    "method": "POST",
+    "path": "/v1/messages",
+    "headers": {
+      "anthropic-version": "2023-06-01"
+    },
+    "json": {
+      "model": "mlx-community/AREX-2-6bit",
+      "max_tokens": 32,
+      "thinking": {
+        "type": "disabled"
+      },
+      "messages": [
+        {
+          "role": "user",
+          "content": "Reply with exactly: ready"
+        }
+      ]
+    }
+  }
+}

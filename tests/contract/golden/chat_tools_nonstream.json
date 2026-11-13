@@ -1,0 +1,98 @@
+{
+  "mode": "schema",
+  "name": "chat_tools_nonstream",
+  "request": {
+    "json": {
+      "enable_thinking": false,
+      "max_tokens": 128,
+      "messages": [
+        {
+          "content": "You are a customer-care assistant. Use the tools you are given.",
+          "role": "system"
+        },
+        {
+          "content": "Check the delivery status of order 1234.",
+          "role": "user"
+        }
+      ],
+      "model": "mlx-community/AREX-2-6bit",
+      "tool_choice": "required",
+      "tools": [
+        {
+          "function": {
+            "description": "Look up the delivery status for a customer order.",
+            "name": "get_order_status",
+            "parameters": {
+              "properties": {
+                "order_id": {
+                  "description": "The order id",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "order_id"
+              ],
+              "type": "object"
+            }
+          },
+          "type": "function"
+        }
+      ]
+    },
+    "method": "POST",
+    "path": "/v1/chat/completions"
+  },
+  "response": {
+    "body": {
+      "choices": [
+        {
+          "finish_reason": "tool_calls",
+          "index": 0,
+          "message": {
+            "content": "",
+            "function_call": null,
+            "name": null,
+            "reasoning_content": "",
+            "role": "assistant",
+            "tool_call_id": null,
+            "tool_calls": [
+              {
+                "function": {
+                  "arguments": "{\"order_id\":\"1234\"}",
+                  "name": "get_order_status"
+                },
+                "id": "call_673d2163ef5e48b28878d027",
+                "type": "function"
+              }
+            ]
+          }
+        }
+      ],
+      "created": 0,
+      "id": "chatcmpl-NORM",
+      "model": "mlx-community/AREX-2-6bit",
+      "object": "chat.completion",
+      "system_fingerprint": "fp-NORM",
+      "usage": {
+        "completion_tokens": 0,
+        "completion_tokens_details": {
+          "reasoning_tokens": 0
+        },
+        "completion_tps": 0,
+        "draft_acceptance": null,
+        "prompt_tokens": 0,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "prompt_tps": 0,
+        "total_ms": 0,
+        "total_tokens": 0,
+        "ttft_ms": 0
+      }
+    },
+    "headers": {
+      "content-type": "application/json"
+    },
+    "status": 200
+  }
+}

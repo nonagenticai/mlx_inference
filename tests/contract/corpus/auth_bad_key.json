@@ -1,0 +1,11 @@
+{
+  "name": "auth_bad_key",
+  "request": {
+    "method": "GET",
+    "path": "/v1/models",
+    "headers": {
+      "Authorization": "Bearer wrong-key"
+    }
+  },
+  "auth_pass": "required"
+}

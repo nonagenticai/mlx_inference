@@ -1,0 +1,10 @@
+mlx_inference
+Copyright 2026 nonagenticai
+
+This product includes software developed at Lablup Inc.
+(https://github.com/lablup/mlxcel), licensed under the Apache License 2.0.
+The file patches/mlxcel-0.8.1-metal-sdpa-chunk-gate.patch is a derivative
+work of mlxcel 0.8.1.
+
+This product links against Apple MLX (https://github.com/ml-explore/mlx),
+licensed under the MIT License.

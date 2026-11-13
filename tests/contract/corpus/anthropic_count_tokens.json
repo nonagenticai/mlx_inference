@@ -1,0 +1,20 @@
+{
+  "name": "anthropic_count_tokens",
+  "mode": "exact",
+  "request": {
+    "method": "POST",
+    "path": "/v1/messages/count_tokens",
+    "headers": {
+      "anthropic-version": "2023-06-01"
+    },
+    "json": {
+      "model": "mlx-community/AREX-2-6bit",
+      "messages": [
+        {
+          "role": "user",
+          "content": "Reply with exactly: ready"
+        }
+      ]
+    }
+  }
+}

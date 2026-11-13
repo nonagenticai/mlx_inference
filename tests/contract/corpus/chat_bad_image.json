@@ -1,0 +1,24 @@
+{
+  "name": "chat_bad_image",
+  "request": {
+    "method": "POST",
+    "path": "/v1/chat/completions",
+    "json": {
+      "model": "mlx-community/AREX-2-6bit",
+      "max_tokens": 8,
+      "messages": [
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "image_url",
+              "image_url": {
+                "url": "data:image/png;base64,bm90YXBuZw=="
+              }
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

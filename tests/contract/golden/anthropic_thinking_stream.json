@@ -1,0 +1,309 @@
+{
+  "mode": "schema",
+  "name": "anthropic_thinking_stream",
+  "request": {
+    "headers": {
+      "anthropic-version": "2023-06-01"
+    },
+    "json": {
+      "max_tokens": 200,
+      "messages": [
+        {
+          "content": "Say pong",
+          "role": "user"
+        }
+      ],
+      "model": "mlx-community/AREX-2-6bit",
+      "stream": true,
+      "thinking": {
+        "budget_tokens": 64,
+        "type": "enabled"
+      }
+    },
+    "method": "POST",
+    "path": "/v1/messages"
+  },
+  "response": {
+    "frames": [
+      {
+        "data": {
+          "message": {
+            "content": [],
+            "id": "msg_8ea7e7fa949961dd00000000",
+            "model": "mlx-community/AREX-2-6bit",
+            "role": "assistant",
+            "stop_reason": null,
+            "stop_sequence": null,
+            "type": "message",
+            "usage": {
+              "input_tokens": 0,
+              "output_tokens": 0
+            }
+          },
+          "type": "message_start"
+        },
+        "event": "message_start"
+      },
+      {
+        "data": {
+          "content_block": {
+            "signature": "",
+            "thinking": "",
+            "type": "thinking"
+          },
+          "index": 0,
+          "type": "content_block_start"
+        },
+        "event": "content_block_start"
+      },
+      {
+        "data": {
+          "delta": {
+            "thinking": "We",
+            "type": "thinking_delta"
+          },
+          "index": 0,
+          "type": "content_block_delta"
+        },
+        "event": "content_block_delta"
+      },
+      {
+        "data": {
+          "delta": {
+            "thinking": " need",
+            "type": "thinking_delta"
+          },
+          "index": 0,
+          "type": "content_block_delta"
+        },
+        "event": "content_block_delta"
+      },
+      {
+        "data": {
+          "delta": {
+            "thinking": " to respond",
+            "type": "thinking_delta"
+          },
+          "index": 0,
+          "type": "content_block_delta"
+        },
+        "event": "content_block_delta"
+      },
+      {
+        "data": {
+          "delta": {
+            "thinking": " to user",
+            "type": "thinking_delta"
+          },
+          "index": 0,
+          "type": "content_block_delta"
+        },
+        "event": "content_block_delta"
+      },
+      {
+        "data": {
+          "delta": {
+            "thinking": " \"",
+            "type": "thinking_delta"
+          },
+          "index": 0,
+          "type": "content_block_delta"
+        },
+        "event": "content_block_delta"
+      },
+      {
+        "data": {
+          "delta": {
+            "thinking": "Say",
+            "type": "thinking_delta"
+          },
+          "index": 0,
+          "type": "content_block_delta"
+        },
+        "event": "content_block_delta"
+      },
+      {
+        "data": {
+          "delta": {
+            "thinking": " pong",
+            "type": "thinking_delta"
+          },
+          "index": 0,
+          "type": "content_block_delta"
+        },
+        "event": "content_block_delta"
+      },
+      {
+        "data": {
+          "delta": {
+            "thinking": "\".",
+            "type": "thinking_delta"
+          },
+          "index": 0,
+          "type": "content_block_delta"
+        },
+        "event": "content_block_delta"
+      },
+      {
+        "data": {
+          "delta": {
+            "thinking": " Simple",
+            "type": "thinking_delta"
+          },
+          "index": 0,
+          "type": "content_block_delta"
+        },
+        "event": "content_block_delta"
+      },
+      {
+        "data": {
+          "delta": {
+            "thinking": ".",
+            "type": "thinking_delta"
+          },
+          "index": 0,
+          "type": "content_block_delta"
+        },
+        "event": "content_block_delta"
+      },
+      {
+        "data": {
+          "delta": {
+            "thinking": " Need",
+            "type": "thinking_delta"
+          },
+          "index": 0,
+          "type": "content_block_delta"
+        },
+        "event": "content_block_delta"
+      },
+      {
+        "data": {
+          "delta": {
+            "thinking": " final",
+            "type": "thinking_delta"
+          },
+          "index": 0,
+          "type": "content_block_delta"
+        },
+        "event": "content_block_delta"
+      },
+      {
+        "data": {
+          "delta": {
+            "thinking": " say",
+            "type": "thinking_delta"
+          },
+          "index": 0,
+          "type": "content_block_delta"
+        },
+        "event": "content_block_delta"
+      },
+      {
+        "data": {
+          "delta": {
+            "thinking": " pong",
+            "type": "thinking_delta"
+          },
+          "index": 0,
+          "type": "content_block_delta"
+        },
+        "event": "content_block_delta"
+      },
+      {
+        "data": {
+          "delta": {
+            "thinking": ".",
+            "type": "thinking_delta"
+          },
+          "index": 0,
+          "type": "content_block_delta"
+        },
+        "event": "content_block_delta"
+      },
+      {
+        "data": {
+          "delta": {
+            "thinking": "\n",
+            "type": "thinking_delta"
+          },
+          "index": 0,
+          "type": "content_block_delta"
+        },
+        "event": "content_block_delta"
+      },
+      {
+        "data": {
+          "delta": {
+            "signature": "",
+            "type": "signature_delta"
+          },
+          "index": 0,
+          "type": "content_block_delta"
+        },
+        "event": "content_block_delta"
+      },
+      {
+        "data": {
+          "index": 0,
+          "type": "content_block_stop"
+        },
+        "event": "content_block_stop"
+      },
+      {
+        "data": {
+          "content_block": {
+            "text": "",
+            "type": "text"
+          },
+          "index": 1,
+          "type": "content_block_start"
+        },
+        "event": "content_block_start"
+      },
+      {
+        "data": {
+          "delta": {
+            "text": "pong",
+            "type": "text_delta"
+          },
+          "index": 1,
+          "type": "content_block_delta"
+        },
+        "event": "content_block_delta"
+      },
+      {
+        "data": {
+          "index": 1,
+          "type": "content_block_stop"
+        },
+        "event": "content_block_stop"
+      },
+      {
+        "data": {
+          "delta": {
+            "stop_reason": "end_turn",
+            "stop_sequence": null
+          },
+          "type": "message_delta",
+          "usage": {
+            "output_tokens": 21
+          }
+        },
+        "event": "message_delta"
+      },
+      {
+        "data": {
+          "type": "message_stop"
+        },
+        "event": "message_stop"
+      }
+    ],
+    "headers": {
+      "cache-control": "no-cache",
+      "content-type": "text/event-stream; charset=utf-8",
+      "x-accel-buffering": "no"
+    },
+    "status": 200
+  }
+}

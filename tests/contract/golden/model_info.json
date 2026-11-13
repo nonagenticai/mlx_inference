@@ -1,0 +1,32 @@
+{
+  "name": "model_info",
+  "mode": "exact",
+  "request": {
+    "method": "GET",
+    "path": "/model/info"
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "models": [
+        {
+          "id": "mlx-community/AREX-2-6bit",
+          "object": "model",
+          "created": 0,
+          "owned_by": "mlx-community",
+          "aliases": [
+            "arex-2-6b"
+          ],
+          "is_default": true,
+          "max_context_length": 262144
+        }
+      ],
+      "default_model": "mlx-community/AREX-2-6bit",
+      "system_fingerprint": "fp-NORM",
+      "timestamp": "TS-NORM"
+    }
+  }
+}

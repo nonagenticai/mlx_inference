@@ -1,0 +1,26 @@
+{
+  "name": "anthropic_thinking_stream",
+  "mode": "schema",
+  "request": {
+    "method": "POST",
+    "path": "/v1/messages",
+    "headers": {
+      "anthropic-version": "2023-06-01"
+    },
+    "json": {
+      "model": "mlx-community/AREX-2-6bit",
+      "max_tokens": 200,
+      "stream": true,
+      "thinking": {
+        "type": "enabled",
+        "budget_tokens": 64
+      },
+      "messages": [
+        {
+          "role": "user",
+          "content": "Say pong"
+        }
+      ]
+    }
+  }
+}

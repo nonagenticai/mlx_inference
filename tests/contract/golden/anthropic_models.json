@@ -1,0 +1,30 @@
+{
+  "mode": "exact",
+  "name": "anthropic_models",
+  "request": {
+    "headers": {
+      "anthropic-version": "2023-06-01"
+    },
+    "method": "GET",
+    "path": "/v1/models"
+  },
+  "response": {
+    "body": {
+      "data": [
+        {
+          "created_at": "TS-NORM",
+          "display_name": "mlx-community/AREX-2-6bit",
+          "id": "mlx-community/AREX-2-6bit",
+          "type": "model"
+        }
+      ],
+      "first_id": "mlx-community/AREX-2-6bit",
+      "has_more": false,
+      "last_id": "mlx-community/AREX-2-6bit"
+    },
+    "headers": {
+      "content-type": "application/json"
+    },
+    "status": 200
+  }
+}

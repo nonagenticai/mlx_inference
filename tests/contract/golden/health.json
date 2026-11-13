@@ -1,0 +1,23 @@
+{
+  "name": "health",
+  "mode": "exact",
+  "request": {
+    "method": "GET",
+    "path": "/health"
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "status": "healthy",
+      "models_loaded": [
+        "mlx-community/AREX-2-6bit"
+      ],
+      "default_model": "mlx-community/AREX-2-6bit",
+      "timestamp": "TS-NORM",
+      "system_fingerprint": "fp-NORM"
+    }
+  }
+}

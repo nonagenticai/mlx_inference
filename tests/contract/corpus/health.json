@@ -1,0 +1,7 @@
+{
+  "name": "health",
+  "request": {
+    "method": "GET",
+    "path": "/health"
+  }
+}

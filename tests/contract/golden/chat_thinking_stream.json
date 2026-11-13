@@ -1,0 +1,464 @@
+{
+  "name": "chat_thinking_stream",
+  "mode": "schema",
+  "request": {
+    "method": "POST",
+    "path": "/v1/chat/completions",
+    "json": {
+      "model": "mlx-community/AREX-2-6bit",
+      "max_tokens": 24,
+      "enable_thinking": true,
+      "stream": true,
+      "messages": [
+        {
+          "role": "user",
+          "content": "Say pong"
+        }
+      ]
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "text/event-stream; charset=utf-8",
+      "cache-control": "no-cache",
+      "x-accel-buffering": "no"
+    },
+    "frames": [
+      {
+        "id": "chatcmpl-NORM",
+        "object": "chat.completion.chunk",
+        "created": 0,
+        "model": "mlx-community/AREX-2-6bit",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "role": "assistant",
+              "content": ""
+            },
+            "finish_reason": null
+          }
+        ],
+        "system_fingerprint": "fp-NORM"
+      },
+      {
+        "id": "chatcmpl-NORM",
+        "object": "chat.completion.chunk",
+        "created": 0,
+        "model": "mlx-community/AREX-2-6bit",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "reasoning_content": "We"
+            },
+            "finish_reason": null
+          }
+        ],
+        "system_fingerprint": "fp-NORM"
+      },
+      {
+        "id": "chatcmpl-NORM",
+        "object": "chat.completion.chunk",
+        "created": 0,
+        "model": "mlx-community/AREX-2-6bit",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "reasoning_content": " need"
+            },
+            "finish_reason": null
+          }
+        ],
+        "system_fingerprint": "fp-NORM"
+      },
+      {
+        "id": "chatcmpl-NORM",
+        "object": "chat.completion.chunk",
+        "created": 0,
+        "model": "mlx-community/AREX-2-6bit",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "reasoning_content": " to"
+            },
+            "finish_reason": null
+          }
+        ],
+        "system_fingerprint": "fp-NORM"
+      },
+      {
+        "id": "chatcmpl-NORM",
+        "object": "chat.completion.chunk",
+        "created": 0,
+        "model": "mlx-community/AREX-2-6bit",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "reasoning_content": " respond"
+            },
+            "finish_reason": null
+          }
+        ],
+        "system_fingerprint": "fp-NORM"
+      },
+      {
+        "id": "chatcmpl-NORM",
+        "object": "chat.completion.chunk",
+        "created": 0,
+        "model": "mlx-community/AREX-2-6bit",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "reasoning_content": " to"
+            },
+            "finish_reason": null
+          }
+        ],
+        "system_fingerprint": "fp-NORM"
+      },
+      {
+        "id": "chatcmpl-NORM",
+        "object": "chat.completion.chunk",
+        "created": 0,
+        "model": "mlx-community/AREX-2-6bit",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "reasoning_content": " user"
+            },
+            "finish_reason": null
+          }
+        ],
+        "system_fingerprint": "fp-NORM"
+      },
+      {
+        "id": "chatcmpl-NORM",
+        "object": "chat.completion.chunk",
+        "created": 0,
+        "model": "mlx-community/AREX-2-6bit",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "reasoning_content": " \""
+            },
+            "finish_reason": null
+          }
+        ],
+        "system_fingerprint": "fp-NORM"
+      },
+      {
+        "id": "chatcmpl-NORM",
+        "object": "chat.completion.chunk",
+        "created": 0,
+        "model": "mlx-community/AREX-2-6bit",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "reasoning_content": "Say"
+            },
+            "finish_reason": null
+          }
+        ],
+        "system_fingerprint": "fp-NORM"
+      },
+      {
+        "id": "chatcmpl-NORM",
+        "object": "chat.completion.chunk",
+        "created": 0,
+        "model": "mlx-community/AREX-2-6bit",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "reasoning_content": " pong"
+            },
+            "finish_reason": null
+          }
+        ],
+        "system_fingerprint": "fp-NORM"
+      },
+      {
+        "id": "chatcmpl-NORM",
+        "object": "chat.completion.chunk",
+        "created": 0,
+        "model": "mlx-community/AREX-2-6bit",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "reasoning_content": "\"."
+            },
+            "finish_reason": null
+          }
+        ],
+        "system_fingerprint": "fp-NORM"
+      },
+      {
+        "id": "chatcmpl-NORM",
+        "object": "chat.completion.chunk",
+        "created": 0,
+        "model": "mlx-community/AREX-2-6bit",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "reasoning_content": " The"
+            },
+            "finish_reason": null
+          }
+        ],
+        "system_fingerprint": "fp-NORM"
+      },
+      {
+        "id": "chatcmpl-NORM",
+        "object": "chat.completion.chunk",
+        "created": 0,
+        "model": "mlx-community/AREX-2-6bit",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "reasoning_content": " user"
+            },
+            "finish_reason": null
+          }
+        ],
+        "system_fingerprint": "fp-NORM"
+      },
+      {
+        "id": "chatcmpl-NORM",
+        "object": "chat.completion.chunk",
+        "created": 0,
+        "model": "mlx-community/AREX-2-6bit",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "reasoning_content": " wants"
+            },
+            "finish_reason": null
+          }
+        ],
+        "system_fingerprint": "fp-NORM"
+      },
+      {
+        "id": "chatcmpl-NORM",
+        "object": "chat.completion.chunk",
+        "created": 0,
+        "model": "mlx-community/AREX-2-6bit",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "reasoning_content": " us"
+            },
+            "finish_reason": null
+          }
+        ],
+        "system_fingerprint": "fp-NORM"
+      },
+      {
+        "id": "chatcmpl-NORM",
+        "object": "chat.completion.chunk",
+        "created": 0,
+        "model": "mlx-community/AREX-2-6bit",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "reasoning_content": " to"
+            },
+            "finish_reason": null
+          }
+        ],
+        "system_fingerprint": "fp-NORM"
+      },
+      {
+        "id": "chatcmpl-NORM",
+        "object": "chat.completion.chunk",
+        "created": 0,
+        "model": "mlx-community/AREX-2-6bit",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "reasoning_content": " say"
+            },
+            "finish_reason": null
+          }
+        ],
+        "system_fingerprint": "fp-NORM"
+      },
+      {
+        "id": "chatcmpl-NORM",
+        "object": "chat.completion.chunk",
+        "created": 0,
+        "model": "mlx-community/AREX-2-6bit",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "reasoning_content": " \""
+            },
+            "finish_reason": null
+          }
+        ],
+        "system_fingerprint": "fp-NORM"
+      },
+      {
+        "id": "chatcmpl-NORM",
+        "object": "chat.completion.chunk",
+        "created": 0,
+        "model": "mlx-community/AREX-2-6bit",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "reasoning_content": "pong"
+            },
+            "finish_reason": null
+          }
+        ],
+        "system_fingerprint": "fp-NORM"
+      },
+      {
+        "id": "chatcmpl-NORM",
+        "object": "chat.completion.chunk",
+        "created": 0,
+        "model": "mlx-community/AREX-2-6bit",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "reasoning_content": "\"."
+            },
+            "finish_reason": null
+          }
+        ],
+        "system_fingerprint": "fp-NORM"
+      },
+      {
+        "id": "chatcmpl-NORM",
+        "object": "chat.completion.chunk",
+        "created": 0,
+        "model": "mlx-community/AREX-2-6bit",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "reasoning_content": " Simple"
+            },
+            "finish_reason": null
+          }
+        ],
+        "system_fingerprint": "fp-NORM"
+      },
+      {
+        "id": "chatcmpl-NORM",
+        "object": "chat.completion.chunk",
+        "created": 0,
+        "model": "mlx-community/AREX-2-6bit",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "reasoning_content": "."
+            },
+            "finish_reason": null
+          }
+        ],
+        "system_fingerprint": "fp-NORM"
+      },
+      {
+        "id": "chatcmpl-NORM",
+        "object": "chat.completion.chunk",
+        "created": 0,
+        "model": "mlx-community/AREX-2-6bit",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "reasoning_content": " We"
+            },
+            "finish_reason": null
+          }
+        ],
+        "system_fingerprint": "fp-NORM"
+      },
+      {
+        "id": "chatcmpl-NORM",
+        "object": "chat.completion.chunk",
+        "created": 0,
+        "model": "mlx-community/AREX-2-6bit",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "reasoning_content": " should"
+            },
+            "finish_reason": null
+          }
+        ],
+        "system_fingerprint": "fp-NORM"
+      },
+      {
+        "id": "chatcmpl-NORM",
+        "object": "chat.completion.chunk",
+        "created": 0,
+        "model": "mlx-community/AREX-2-6bit",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {
+              "reasoning_content": " just"
+            },
+            "finish_reason": null
+          }
+        ],
+        "system_fingerprint": "fp-NORM"
+      },
+      {
+        "id": "chatcmpl-NORM",
+        "object": "chat.completion.chunk",
+        "created": 0,
+        "model": "mlx-community/AREX-2-6bit",
+        "choices": [
+          {
+            "index": 0,
+            "delta": {},
+            "finish_reason": "length"
+          }
+        ],
+        "usage": {
+          "prompt_tokens": 0,
+          "completion_tokens": 0,
+          "total_tokens": 0,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          },
+          "completion_tokens_details": {
+            "reasoning_tokens": 0
+          },
+          "ttft_ms": 0,
+          "prompt_tps": 0,
+          "completion_tps": 0,
+          "total_ms": 0,
+          "draft_acceptance": null
+        },
+        "system_fingerprint": "fp-NORM"
+      },
+      {
+        "[DONE]": true
+      }
+    ]
+  }
+}

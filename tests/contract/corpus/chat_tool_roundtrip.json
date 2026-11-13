@@ -1,0 +1,45 @@
+{
+  "name": "chat_tool_roundtrip",
+  "request": {
+    "method": "POST",
+    "path": "/v1/chat/completions",
+    "json": {
+      "model": "mlx-community/AREX-2-6bit",
+      "max_tokens": 96,
+      "enable_thinking": false,
+      "messages": [
+        {
+          "role": "system",
+          "content": "You are a customer-care assistant. Use the tools you are given."
+        },
+        {
+          "role": "user",
+          "content": "Check the delivery status of order 1234."
+        },
+        {
+          "role": "assistant",
+          "content": "",
+          "tool_calls": [
+            {
+              "id": "call_probe_1",
+              "type": "function",
+              "function": {
+                "name": "get_order_status",
+                "arguments": "{\"order_id\":\"1234\"}"
+              }
+            }
+          ]
+        },
+        {
+          "role": "tool",
+          "tool_call_id": "call_probe_1",
+          "content": "{\"status\":\"in transit\",\"eta\":\"tomorrow\"}"
+        },
+        {
+          "role": "user",
+          "content": "When will it arrive? Answer in one sentence."
+        }
+      ]
+    }
+  }
+}

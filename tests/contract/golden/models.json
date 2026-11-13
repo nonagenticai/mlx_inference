@@ -1,0 +1,44 @@
+{
+  "name": "models",
+  "mode": "exact",
+  "request": {
+    "method": "GET",
+    "path": "/v1/models"
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "object": "list",
+      "data": [
+        {
+          "id": "mlx-community/AREX-2-6bit",
+          "object": "model",
+          "created": 0,
+          "owned_by": "mlx-community",
+          "permission": [
+            {
+              "id": "modelperm-NORM",
+              "object": "model_permission",
+              "created": 0,
+              "allow_create_engine": false,
+              "allow_sampling": true,
+              "allow_logprobs": true,
+              "allow_search_indices": false,
+              "allow_view": true,
+              "allow_fine_tuning": false,
+              "organization": "*",
+              "group": null,
+              "is_blocking": false
+            }
+          ],
+          "root": "mlx-community/AREX-2-6bit",
+          "parent": null,
+          "max_context_length": 262144
+        }
+      ]
+    }
+  }
+}

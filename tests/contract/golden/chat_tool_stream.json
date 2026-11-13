@@ -1,0 +1,315 @@
+{
+  "mode": "schema",
+  "name": "chat_tool_stream",
+  "request": {
+    "json": {
+      "enable_thinking": false,
+      "max_tokens": 128,
+      "messages": [
+        {
+          "content": "You are a customer-care assistant. Use the tools you are given.",
+          "role": "system"
+        },
+        {
+          "content": "Check the delivery status of order 1234.",
+          "role": "user"
+        }
+      ],
+      "model": "mlx-community/AREX-2-6bit",
+      "stream": true,
+      "tool_choice": "required",
+      "tools": [
+        {
+          "function": {
+            "description": "Look up the delivery status for a customer order.",
+            "name": "get_order_status",
+            "parameters": {
+              "properties": {
+                "order_id": {
+                  "description": "The order id",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "order_id"
+              ],
+              "type": "object"
+            }
+          },
+          "type": "function"
+        }
+      ]
+    },
+    "method": "POST",
+    "path": "/v1/chat/completions"
+  },
+  "response": {
+    "frames": [
+      {
+        "choices": [
+          {
+            "delta": {
+              "content": "",
+              "role": "assistant"
+            },
+            "finish_reason": null,
+            "index": 0
+          }
+        ],
+        "created": 0,
+        "id": "chatcmpl-NORM",
+        "model": "mlx-community/AREX-2-6bit",
+        "object": "chat.completion.chunk",
+        "system_fingerprint": "fp-NORM"
+      },
+      {
+        "choices": [
+          {
+            "delta": {
+              "tool_calls": [
+                {
+                  "function": {
+                    "name": "get_order_status"
+                  },
+                  "id": "call_efba80e1f4a94edeae303162",
+                  "index": 0,
+                  "type": "function"
+                }
+              ]
+            },
+            "finish_reason": null,
+            "index": 0
+          }
+        ],
+        "created": 0,
+        "id": "chatcmpl-NORM",
+        "model": "mlx-community/AREX-2-6bit",
+        "object": "chat.completion.chunk",
+        "system_fingerprint": "fp-NORM"
+      },
+      {
+        "choices": [
+          {
+            "delta": {
+              "tool_calls": [
+                {
+                  "function": {
+                    "arguments": "{"
+                  },
+                  "index": 0
+                }
+              ]
+            },
+            "finish_reason": null,
+            "index": 0
+          }
+        ],
+        "created": 0,
+        "id": "chatcmpl-NORM",
+        "model": "mlx-community/AREX-2-6bit",
+        "object": "chat.completion.chunk",
+        "system_fingerprint": "fp-NORM"
+      },
+      {
+        "choices": [
+          {
+            "delta": {
+              "tool_calls": [
+                {
+                  "function": {
+                    "arguments": "\"order_id\":\""
+                  },
+                  "index": 0
+                }
+              ]
+            },
+            "finish_reason": null,
+            "index": 0
+          }
+        ],
+        "created": 0,
+        "id": "chatcmpl-NORM",
+        "model": "mlx-community/AREX-2-6bit",
+        "object": "chat.completion.chunk",
+        "system_fingerprint": "fp-NORM"
+      },
+      {
+        "choices": [
+          {
+            "delta": {
+              "tool_calls": [
+                {
+                  "function": {
+                    "arguments": "1"
+                  },
+                  "index": 0
+                }
+              ]
+            },
+            "finish_reason": null,
+            "index": 0
+          }
+        ],
+        "created": 0,
+        "id": "chatcmpl-NORM",
+        "model": "mlx-community/AREX-2-6bit",
+        "object": "chat.completion.chunk",
+        "system_fingerprint": "fp-NORM"
+      },
+      {
+        "choices": [
+          {
+            "delta": {
+              "tool_calls": [
+                {
+                  "function": {
+                    "arguments": "2"
+                  },
+                  "index": 0
+                }
+              ]
+            },
+            "finish_reason": null,
+            "index": 0
+          }
+        ],
+        "created": 0,
+        "id": "chatcmpl-NORM",
+        "model": "mlx-community/AREX-2-6bit",
+        "object": "chat.completion.chunk",
+        "system_fingerprint": "fp-NORM"
+      },
+      {
+        "choices": [
+          {
+            "delta": {
+              "tool_calls": [
+                {
+                  "function": {
+                    "arguments": "3"
+                  },
+                  "index": 0
+                }
+              ]
+            },
+            "finish_reason": null,
+            "index": 0
+          }
+        ],
+        "created": 0,
+        "id": "chatcmpl-NORM",
+        "model": "mlx-community/AREX-2-6bit",
+        "object": "chat.completion.chunk",
+        "system_fingerprint": "fp-NORM"
+      },
+      {
+        "choices": [
+          {
+            "delta": {
+              "tool_calls": [
+                {
+                  "function": {
+                    "arguments": "4"
+                  },
+                  "index": 0
+                }
+              ]
+            },
+            "finish_reason": null,
+            "index": 0
+          }
+        ],
+        "created": 0,
+        "id": "chatcmpl-NORM",
+        "model": "mlx-community/AREX-2-6bit",
+        "object": "chat.completion.chunk",
+        "system_fingerprint": "fp-NORM"
+      },
+      {
+        "choices": [
+          {
+            "delta": {
+              "tool_calls": [
+                {
+                  "function": {
+                    "arguments": "\""
+                  },
+                  "index": 0
+                }
+              ]
+            },
+            "finish_reason": null,
+            "index": 0
+          }
+        ],
+        "created": 0,
+        "id": "chatcmpl-NORM",
+        "model": "mlx-community/AREX-2-6bit",
+        "object": "chat.completion.chunk",
+        "system_fingerprint": "fp-NORM"
+      },
+      {
+        "choices": [
+          {
+            "delta": {
+              "tool_calls": [
+                {
+                  "function": {
+                    "arguments": "}"
+                  },
+                  "index": 0
+                }
+              ]
+            },
+            "finish_reason": null,
+            "index": 0
+          }
+        ],
+        "created": 0,
+        "id": "chatcmpl-NORM",
+        "model": "mlx-community/AREX-2-6bit",
+        "object": "chat.completion.chunk",
+        "system_fingerprint": "fp-NORM"
+      },
+      {
+        "choices": [
+          {
+            "delta": {},
+            "finish_reason": "tool_calls",
+            "index": 0
+          }
+        ],
+        "created": 0,
+        "id": "chatcmpl-NORM",
+        "model": "mlx-community/AREX-2-6bit",
+        "object": "chat.completion.chunk",
+        "system_fingerprint": "fp-NORM",
+        "usage": {
+          "completion_tokens": 0,
+          "completion_tokens_details": {
+            "reasoning_tokens": 0
+          },
+          "completion_tps": 0,
+          "draft_acceptance": null,
+          "prompt_tokens": 0,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          },
+          "prompt_tps": 0,
+          "total_ms": 0,
+          "total_tokens": 0,
+          "ttft_ms": 0
+        }
+      },
+      {
+        "[DONE]": true
+      }
+    ],
+    "headers": {
+      "cache-control": "no-cache",
+      "content-type": "text/event-stream; charset=utf-8",
+      "x-accel-buffering": "no"
+    },
+    "status": 200
+  }
+}

@@ -1,0 +1,30 @@
+{
+  "name": "chat_unknown_model",
+  "mode": "exact",
+  "request": {
+    "method": "POST",
+    "path": "/v1/chat/completions",
+    "json": {
+      "model": "nope/not-a-model",
+      "messages": [
+        {
+          "role": "user",
+          "content": "hi"
+        }
+      ]
+    }
+  },
+  "response": {
+    "status": 404,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "error": {
+        "message": "Model 'nope/not-a-model' not found. Available: ['mlx-community/AREX-2-6bit', 'arex-2-6b']",
+        "type": "not_found_error",
+        "code": "404"
+      }
+    }
+  }
+}

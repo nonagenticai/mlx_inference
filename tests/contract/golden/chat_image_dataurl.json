@@ -1,0 +1,74 @@
+{
+  "name": "chat_image_dataurl",
+  "mode": "schema",
+  "request": {
+    "method": "POST",
+    "path": "/v1/chat/completions",
+    "json": {
+      "model": "mlx-community/AREX-2-6bit",
+      "max_tokens": 16,
+      "enable_thinking": false,
+      "messages": [
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "text",
+              "text": "What colour is this image?"
+            },
+            {
+              "type": "image_url",
+              "image_url": {
+                "url": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAIAAACQkWg2AAAAF0lEQVR4nGP4z8BAEiJN9aiGUQ1DSgMAkPn/Afnh+ngAAAAASUVORK5CYII="
+              }
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "id": "chatcmpl-NORM",
+      "object": "chat.completion",
+      "created": 0,
+      "model": "mlx-community/AREX-2-6bit",
+      "choices": [
+        {
+          "index": 0,
+          "message": {
+            "role": "assistant",
+            "content": "The image is a solid, uniform shade of **red**.\n\nThere are no",
+            "name": null,
+            "tool_call_id": null,
+            "tool_calls": null,
+            "function_call": null,
+            "reasoning_content": ""
+          },
+          "finish_reason": "length"
+        }
+      ],
+      "usage": {
+        "prompt_tokens": 0,
+        "completion_tokens": 0,
+        "total_tokens": 0,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "completion_tokens_details": {
+          "reasoning_tokens": 0
+        },
+        "ttft_ms": 0,
+        "prompt_tps": 0,
+        "completion_tps": 0,
+        "total_ms": 0,
+        "draft_acceptance": null
+      },
+      "system_fingerprint": "fp-NORM"
+    }
+  }
+}

@@ -1,0 +1,43 @@
+{
+  "name": "chat_tool_stream",
+  "request": {
+    "method": "POST",
+    "path": "/v1/chat/completions",
+    "json": {
+      "model": "mlx-community/AREX-2-6bit",
+      "max_tokens": 128,
+      "enable_thinking": false,
+      "stream": true,
+      "tool_choice": "required",
+      "tools": [
+        {
+          "type": "function",
+          "function": {
+            "name": "get_order_status",
+            "description": "Look up the delivery status for a customer order.",
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "order_id": {
+                  "type": "string",
+                  "description": "The order id"
+                }
+              },
+              "required": ["order_id"]
+            }
+          }
+        }
+      ],
+      "messages": [
+        {
+          "role": "system",
+          "content": "You are a customer-care assistant. Use the tools you are given."
+        },
+        {
+          "role": "user",
+          "content": "Check the delivery status of order 1234."
+        }
+      ]
+    }
+  }
+}
