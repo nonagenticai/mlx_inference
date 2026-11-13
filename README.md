@@ -1,6 +1,9 @@
 # MLX Inference
 
 [![Tests](https://github.com/nonagenticai/mlx_inference/actions/workflows/tests.yml/badge.svg)](https://github.com/nonagenticai/mlx_inference/actions/workflows/tests.yml)
+[![Secret scan](https://github.com/nonagenticai/mlx_inference/actions/workflows/secret-scan.yml/badge.svg)](https://github.com/nonagenticai/mlx_inference/actions/workflows/secret-scan.yml)
+[![Release](https://img.shields.io/github/v/release/nonagenticai/mlx_inference)](https://github.com/nonagenticai/mlx_inference/releases)
+[![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 
 OpenAI- and Anthropic-compatible inference server for Apple Silicon, with a browser console.
 Serves `mlx-community/AREX-2-6bit` by default; any checkpoint the engine supports can be loaded
@@ -229,6 +232,16 @@ patches/                       the Metal SDPA chunk-gate patch for mlxcel
 docs/                          Anthropic contract and tool-calling notes
 mlx.md                         running AREX-2 locally: memory, limits, measurements
 ```
+
+## Security
+
+Report vulnerabilities privately through the repository's Security tab — see
+[`SECURITY.md`](SECURITY.md). Do not open a public issue for a security problem.
+
+## Contributing
+
+Issues and pull requests are welcome. See [`CONTRIBUTING.md`](CONTRIBUTING.md) for the setup,
+the test and lint commands, and the commit conventions. Commits carry DCO sign-off.
 
 ## License
 
