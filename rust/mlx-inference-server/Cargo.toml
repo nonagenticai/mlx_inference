@@ -30,6 +30,6 @@ libc = "=0.2.191"
 
 [dev-dependencies]
 http-body-util = "=0.1.5"
-rand = "=0.8.8"
+rand = "=0.10.3"
 rsa = "=0.9.10"
 tempfile = "=3.27.0"
