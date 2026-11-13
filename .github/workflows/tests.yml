@@ -25,7 +25,7 @@ jobs:
     env:
       CARGO_INCREMENTAL: "0"
     steps:
-      - uses: actions/checkout@v6.0.2
+      - uses: actions/checkout@v7.0.1
 
       - name: Install the pinned toolchain
         uses: dtolnay/rust-toolchain@stable
