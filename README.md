@@ -243,6 +243,14 @@ Report vulnerabilities privately through the repository's Security tab — see
 Issues and pull requests are welcome. See [`CONTRIBUTING.md`](CONTRIBUTING.md) for the setup,
 the test and lint commands, and the commit conventions. Commits carry DCO sign-off.
 
+## Licensing
+
+The code in this repository is Apache-2.0 and needs no licence key to build, test or run.
+The inference server carries an **optional** entitlement gate: `W2V_LICENSE_GATE_ENABLED`
+absent means off. The estate's mini deployments arm it — a deployment decision, not a
+requirement of this code. Armed, it requires `W2V_LICENSES_URL`, introspects the caller's
+licence token, and answers `402` for expired or revoked tenants rather than serving them.
+
 ## License
 
 Apache License 2.0 — see [`LICENSE`](LICENSE). Attribution for the engine and the ML framework is
