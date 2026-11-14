@@ -6,6 +6,20 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Documented
+
+- `/v1/rerank` answers with **probabilities in `[0, 1]`**, the same contract `mlx_api`
+  had: measured on both the deployed engine and the pinned one, a relevant pair scores
+  `0.9998465`, a partial one `0.19477175` and an unrelated one `0.0000161`. Issue #7
+  recorded the engine as returning a raw logit because `3.56e-05` was read from the
+  unrelated row. Nothing needed changing here, and nothing was changed.
+
+### Changed
+
+- The engine build is pinned to an explicit upstream revision instead of whatever the
+  local `$MLXCEL_SRC` clone happens to contain, and the build asserts that the revision
+  carries the fixes this project depends on. See `scripts/build-mlxcel.sh`.
+
 ## [0.1.0] - 2026-11-13
 
 First public release.

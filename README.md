@@ -84,6 +84,18 @@ seconds to a minute; `/health/live` answers immediately while `/health` reports
 | GET | `/health/ready` | 503 until the engine is up |
 | GET | `/health/live` | Process liveness |
 
+Each host serves a subset of the capability routes below, named by
+`MLXCEL_CAPABILITIES` (chat, embedding, rerank, speech, transcription). A
+capability the host does not name is a 404, not a route that fails later.
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/v1/embeddings` | OpenAI-compatible embeddings, forwarded to the engine's own `--embedding-model` |
+| POST | `/v1/rerank` | Rerank, forwarded to `--reranker-model`. `relevance_score` is a **probability in `[0, 1]`**, the same contract `mlx_api` had — verified on the engine itself (relevant `0.9998`, partial `0.1948`, unrelated `0.000016`), so this server forwards it untouched |
+| POST | `/v1/audio/speech` | Kokoro TTS, 24 kHz mono WAV; `voice` selects one of the checkpoint's 54 packs |
+| POST | `/api/tts/synthesize` | The legacy narration contract `tts_backend` served: SSML-free text in, WAV or base64 JSON out, with the loudness premaster and its headers |
+| POST | `/v1/audio/transcriptions` | OpenAI-compatible transcription. Whisper support is fp16/f32 only, WAV only, greedy, and returns no timestamps — a quantized checkpoint will not load |
+
 `/v1/*` and `/metrics` require authentication unless `AUTH_ENABLED=false`.
 
 ## Authentication
@@ -209,15 +221,20 @@ Live ladders against a running server:
 ./scripts/smoke_arex.sh        # text, thinking, vision, streaming, cancel, telemetry, tools
 ```
 
-## Running a patched engine
+## Building the engine
 
-`mlxcel` 0.8.1 bounds the SDPA score matrix on CUDA only. On Metal, an array-mask call at
-head_dim 256 is not fused on pre-M5 GPUs, so a prompt past ~18k tokens asks Metal for a
-single 33.9 GB buffer and fails. `patches/mlxcel-0.8.1-metal-sdpa-chunk-gate.patch` enables the
-same query-axis chunking for Metal. `scripts/build-mlxcel.sh` applies it to a `lablup/mlxcel`
-clone and installs the result under `vendor/mlxcel/`, which `serve_rust.sh` prefers over the
-Homebrew binary. See [`mlx.md`](mlx.md) for the measurements and the memory settings that go
-with it.
+`mlxcel` publishes no tag newer than v0.8.1, and two fixes this project needs are main-only:
+Kokoro TTS start-up without a tokenizer file (`5e3000e1f6`) and the Metal prefill SDPA chunk
+gate (`#3049`). So `scripts/build-mlxcel.sh` builds from a **pinned revision**, writes that
+revision to `vendor/mlxcel/REVISION`, and refuses to build if the checkout lacks either fix.
+The binary itself reports only the crate version (`0.8.1`), so that file is the only durable
+link between a deployed engine and its source.
+
+Everything else about the build is accommodation, not behaviour: `patches/mlxcel-pinned-local-metallib-overlay.patch`
+reuses the matching release artifact's `mlx.metallib` and a clang-based `xcrun metal` shim is
+put on PATH, because this host has only the Command Line Tools. The result installs under
+`vendor/mlxcel/`, which `serve_rust.sh` prefers over the Homebrew binary. See
+[`mlx.md`](mlx.md) for the measurements and the memory settings that go with it.
 
 ## Layout
 

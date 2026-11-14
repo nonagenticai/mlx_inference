@@ -33,16 +33,18 @@ to fit — the load aborts instead. The engine sets the wired limit itself and r
 footprint in each request's `peak_memory_gb`. Reserve headroom for the KV cache and for
 whatever else shares the Mac.
 
-**Long prompts.** `mlxcel` 0.8.1 bounds the score matrix its SDPA materialises by chunking the
-query axis — on CUDA only (`sdpa_query_chunk_within_budget` returns early off CUDA). On Metal
-an array-mask call at head_dim 256 (AREX-2) is not fused on pre-M5 GPUs, so MLX's fallback
-forms `[B,H,L,L]` scores: 33.9 GB at 26.6k tokens, over Metal's 30.15 GB per-buffer cap, and
-every prompt past ~18k tokens failed with a `metal::malloc` error. `patches/mlxcel-0.8.1-metal-sdpa-chunk-gate.patch`
-enables the same gate for Metal, asking MLX's own fused-vs-fallback probe
-(`MLXCEL_METAL_ATTENTION_CHUNK=0` restores the old route). `scripts/build-mlxcel.sh` builds it
-into `vendor/mlxcel/`, which `serve_rust.sh` prefers over the Homebrew binary; the source clone
-path is set with `MLXCEL_SRC`, and the build reuses the release artifact's `mlx.metallib`
-plus a clang-based `xcrun metal` shim because this host has no Metal compiler (CLT only).
+**Long prompts.** In `mlxcel` 0.8.1 the score matrix SDPA materialises is bounded by chunking
+the query axis — on CUDA only (`sdpa_query_chunk_within_budget` returns early off CUDA). On
+Metal an array-mask call at head_dim 256 (AREX-2) is not fused on pre-M5 GPUs, so MLX's
+fallback forms `[B,H,L,L]` scores: 33.9 GB at 26.6k tokens, over Metal's 30.15 GB per-buffer
+cap, and every prompt past ~18k tokens failed with a `metal::malloc` error. Upstream fixed
+this in `#3049` (reported from this box): the gate now picks its backend at runtime, asks
+MLX's own fused-vs-fallback verdict, and defaults to a 256 MiB chunk budget on Metal
+(`MLXCEL_ATTENTION_CHUNK_BUDGET_MB`; `MLXCEL_METAL_ATTENTION_CHUNK=0` restores the single-call
+fallback). `scripts/build-mlxcel.sh` builds the pinned revision that carries it into
+`vendor/mlxcel/`, which `serve_rust.sh` prefers over the Homebrew binary; the source clone path
+is set with `MLXCEL_SRC`, and the build reuses the release artifact's `mlx.metallib` plus a
+clang-based `xcrun metal` shim because this host has no Metal compiler (CLT only).
 
 Measured on this box 2026-11-12 with the patched engine and 6-bit weights (21.9 GB resident):
 a 26.6k-token prompt returns 200 in 404 s with the correct needle answer, and Claude Code's
