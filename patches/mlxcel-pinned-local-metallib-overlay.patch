@@ -1,0 +1,67 @@
+diff --git a/src/lib/mlxcelverse/CMakeLists.txt b/src/lib/mlxcelverse/CMakeLists.txt
+index 20d98a8f..814295b6 100644
+--- a/src/lib/mlxcelverse/CMakeLists.txt
++++ b/src/lib/mlxcelverse/CMakeLists.txt
+@@ -66,6 +66,7 @@ function(mlx_apply_source_overlays mlx_source_dir)
+   # `load_safe` bodies.
+   set(_metal_patch_files
+       "mlx/backend/metal/device.cpp"
++      "mlx/backend/metal/kernels/CMakeLists.txt"
+       "mlx/backend/metal/kernels/fp_quantized.h"
+       "mlx/backend/metal/kernels/fp_quantized_nax.h"
+       "mlx/backend/metal/kernels/quantized.h"
+diff --git a/src/lib/mlxcelverse/overlays/metal/mlx/backend/metal/kernels/CMakeLists.txt b/src/lib/mlxcelverse/overlays/metal/mlx/backend/metal/kernels/CMakeLists.txt
+new file mode 100644
+index 00000000..94e4fd91
+--- /dev/null
++++ b/src/lib/mlxcelverse/overlays/metal/mlx/backend/metal/kernels/CMakeLists.txt
+@@ -0,0 +1,49 @@
++# mlxcel local-build overlay — reuse a prebuilt mlx.metallib.
++#
++# Upstream compiles the Metal kernel sources with `xcrun -sdk macosx metal`,
++# which ships with full Xcode. A host with only the Command Line Tools cannot
++# run that step (the Metal toolchain is not part of the CLT). The metallib is
++# a pure function of the pinned MLX commit, so the one inside the matching
++# mlxcel release artifact is exactly the library this build would produce:
++# same GIT_TAG, same overlays.
++#
++# This overlay is a local build convenience. It is NOT part of anything
++# proposed upstream, and the release path is unaffected because it runs on a
++# self-hosted macOS runner with the full toolchain.
++#
++# Override the source with
++#   -DMLXCEL_PREBUILT_METALLIB=/path/to/libexec/mlx.metallib
++# and point build-mlxcel.sh at the same file through MLXCEL_METALLIB.
++
++set(MLXCEL_PREBUILT_METALLIB
++    "/opt/homebrew/Cellar/mlxcel/0.8.1/libexec/mlx.metallib"
++    CACHE FILEPATH "Prebuilt mlx.metallib to reuse instead of compiling kernels")
++
++if(NOT EXISTS "${MLXCEL_PREBUILT_METALLIB}")
++  message(FATAL_ERROR
++          "MLXCEL_PREBUILT_METALLIB='${MLXCEL_PREBUILT_METALLIB}' does not exist. "
++          "Point it at the mlx.metallib from a matching mlxcel release artifact.")
++endif()
++
++message(STATUS
++        "Reusing prebuilt Metal kernels: ${MLXCEL_PREBUILT_METALLIB} "
++        "-> ${MLX_METAL_PATH}/mlx.metallib")
++
++add_custom_command(
++  OUTPUT ${MLX_METAL_PATH}/mlx.metallib
++  COMMAND ${CMAKE_COMMAND} -E make_directory ${MLX_METAL_PATH}
++  COMMAND ${CMAKE_COMMAND} -E copy_if_different "${MLXCEL_PREBUILT_METALLIB}"
++          ${MLX_METAL_PATH}/mlx.metallib
++  DEPENDS "${MLXCEL_PREBUILT_METALLIB}"
++  COMMENT "Copying prebuilt mlx.metallib"
++  VERBATIM)
++
++add_custom_target(mlx-metallib DEPENDS ${MLX_METAL_PATH}/mlx.metallib)
++add_dependencies(mlx mlx-metallib)
++
++# Install metallib
++include(GNUInstallDirs)
++install(
++  FILES ${MLX_METAL_PATH}/mlx.metallib
++  DESTINATION ${CMAKE_INSTALL_LIBDIR}
++  COMPONENT metallib)
