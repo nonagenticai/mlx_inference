@@ -178,6 +178,14 @@ async fn an_image_document_returns_one_mistral_page() {
     // identical pages came back with three different transcriptions.
     assert_eq!(captured.params.temperature, Some(0.0));
     assert_eq!(captured.params.max_tokens, Some(2048));
+    // A near-empty page makes PaddleOCR-VL repeat its one line (measured on the
+    // deployed build: `…alpha.\n\n…alpha.`, finish_reason=stop, both copies in
+    // `content`). The route asks the engine to break the loop; 1.1 returns the
+    // line once and leaves a dense page unchanged.
+    assert_eq!(
+        captured.params.repetition_penalty,
+        Some(mlx_inference_server::http::ocr::REPETITION_PENALTY)
+    );
     let content = &captured.messages[0]["content"];
     assert_eq!(content[0]["type"], "text");
     assert_eq!(content[0]["text"], "OCR:");

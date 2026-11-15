@@ -685,6 +685,9 @@ pub fn chat_body(req: &GenerateRequest, model: &str) -> Value {
     if let Some(value) = params.temperature {
         body.insert("temperature".to_owned(), json!(value));
     }
+    if let Some(value) = params.repetition_penalty {
+        body.insert("repetition_penalty".to_owned(), json!(value));
+    }
     if let Some(value) = params.top_p {
         body.insert("top_p".to_owned(), json!(value));
     }
