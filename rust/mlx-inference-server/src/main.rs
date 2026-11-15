@@ -53,7 +53,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing::info!(
         bin = %mlxcel.bin.display(),
         port = mlxcel.port,
-        model = %mlxcel.model_path,
+        // Empty on an image-only host, which passes `--image-model` and no `-m`.
+        model = mlxcel.model_path.as_deref().unwrap_or(""),
+        image_model = mlxcel.image_model.as_deref().unwrap_or(""),
         "mlxcel worker starting"
     );
     let worker = MlxcelWorker::start(mlxcel);
