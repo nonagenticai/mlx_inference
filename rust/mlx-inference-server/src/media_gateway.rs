@@ -299,6 +299,24 @@ pub async fn fetch_guarded<T: HttpTransport>(
     start: &Url,
     limits: MediaLimits,
 ) -> Result<FetchedImage, MediaError> {
+    fetch_guarded_media(transport, start, limits, &ALLOWED_MEDIA_TYPES, "Image").await
+}
+
+/// The same policy, for a caller that accepts a different set of media types.
+///
+/// `/v1/ocr` fetches whole PDFs, which [`ALLOWED_MEDIA_TYPES`] correctly refuses
+/// for chat images. Everything else — the scheme check, the SSRF check before
+/// every dial, the redirect loop, the declared-length and streamed byte caps —
+/// is identical, so it lives here once rather than being copied. `noun` only
+/// changes the wording of the error ("Image URL …" / "Document URL …"); the
+/// image path passes `"Image"` and keeps its historical messages byte for byte.
+pub async fn fetch_guarded_media<T: HttpTransport>(
+    transport: &T,
+    start: &Url,
+    limits: MediaLimits,
+    allowed: &[&str],
+    noun: &str,
+) -> Result<FetchedImage, MediaError> {
     let mut current = start.clone();
     for hop in 0..=limits.max_redirects {
         ensure_http_scheme(&current)?;
@@ -308,35 +326,38 @@ pub async fn fetch_guarded<T: HttpTransport>(
         if is_redirect(response.status) {
             if hop == limits.max_redirects {
                 return Err(MediaError::new(format!(
-                    "Image URL redirected more than {} times",
+                    "{noun} URL redirected more than {} times",
                     limits.max_redirects
                 )));
             }
-            let location = response
-                .location
-                .ok_or_else(|| MediaError::new("Image URL redirect had no Location header"))?;
+            let location = response.location.ok_or_else(|| {
+                MediaError::new(format!("{noun} URL redirect had no Location header"))
+            })?;
             current = current.join(&location).map_err(|_| {
-                MediaError::new(format!("Invalid image URL redirect location: {location}"))
+                MediaError::new(format!(
+                    "Invalid {} URL redirect location: {location}",
+                    noun.to_lowercase()
+                ))
             })?;
             continue;
         }
 
         if !(200..300).contains(&response.status) {
             return Err(MediaError::new(format!(
-                "Image URL returned HTTP {}",
+                "{noun} URL returned HTTP {}",
                 response.status
             )));
         }
 
         let media_type = base_media_type(response.content_type.as_deref());
-        if !ALLOWED_MEDIA_TYPES.contains(&media_type.as_str()) {
+        if !allowed.contains(&media_type.as_str()) {
             let shown = if media_type.is_empty() {
                 "missing"
             } else {
                 &media_type
             };
             return Err(MediaError::new(format!(
-                "Image URL returned unsupported content type: {shown}"
+                "{noun} URL returned unsupported content type: {shown}"
             )));
         }
 
@@ -344,7 +365,7 @@ pub async fn fetch_guarded<T: HttpTransport>(
             && declared > limits.max_image_bytes as u64
         {
             return Err(MediaError::new(format!(
-                "Image is too large: {declared} bytes (limit {})",
+                "{noun} is too large: {declared} bytes (limit {})",
                 limits.max_image_bytes
             )));
         }
@@ -357,14 +378,16 @@ pub async fn fetch_guarded<T: HttpTransport>(
             total += chunk.len();
             if total > limits.max_image_bytes {
                 return Err(MediaError::new(format!(
-                    "Image is too large: more than {} bytes",
+                    "{noun} is too large: more than {} bytes",
                     limits.max_image_bytes
                 )));
             }
             bytes.extend_from_slice(&chunk);
         }
         if total == 0 {
-            return Err(MediaError::new("Image URL returned an empty body"));
+            return Err(MediaError::new(format!(
+                "{noun} URL returned an empty body"
+            )));
         }
         return Ok(FetchedImage {
             bytes,
@@ -372,7 +395,9 @@ pub async fn fetch_guarded<T: HttpTransport>(
         });
     }
 
-    Err(MediaError::new("Image URL redirected too many times"))
+    Err(MediaError::new(format!(
+        "{noun} URL redirected too many times"
+    )))
 }
 
 fn ensure_http_scheme(url: &Url) -> Result<(), MediaError> {
