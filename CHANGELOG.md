@@ -29,6 +29,13 @@ All notable changes to this project are documented here. The format follows
 - The engine build is pinned to an explicit upstream revision instead of whatever the
   local `$MLXCEL_SRC` clone happens to contain, and the build asserts that the revision
   carries the fixes this project depends on. See `scripts/build-mlxcel.sh`.
+- `scripts/parity_embed_rerank.py` gates on measurements instead of the invented
+  `cosine >= 0.9999` / exact-order pair that failed the port's own final run. The
+  2026-11-15 full-corpus measurement is in the docstring (cosine min `0.9976175`,
+  rerank `|Δ|` max `0.00138`, both now inside the gate), the rerank order is compared
+  with a documented tie band, and `--self-test` checks the gate logic without a network.
+  `--old-rerank-path` lets the harness compare two builds of this server, which is
+  what it is for now that `mlx_api` is retired.
 
 ## [0.1.0] - 2026-11-13
 
