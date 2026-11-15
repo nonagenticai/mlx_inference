@@ -173,6 +173,11 @@ async fn an_image_document_returns_one_mistral_page() {
     // The engine is asked exactly as the contract describes: one user turn, the
     // `OCR:` prompt, then the page as an image part.
     let captured = worker.captured();
+    // Greedy decoding is part of the contract: the reference passes
+    // `temperature=0.0` to the engine, and at the engine default three
+    // identical pages came back with three different transcriptions.
+    assert_eq!(captured.params.temperature, Some(0.0));
+    assert_eq!(captured.params.max_tokens, Some(2048));
     let content = &captured.messages[0]["content"];
     assert_eq!(content[0]["type"], "text");
     assert_eq!(content[0]["text"], "OCR:");
