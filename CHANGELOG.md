@@ -6,6 +6,16 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- `POST /v1/ocr`, the Mistral document-OCR contract `strata_ingest` speaks: a
+  `document_url`/`image_url` (base64 `data:` URI or guarded HTTP fetch), PDFs rasterised
+  page by page with `pdftoppm` at the reference's 200 dpi, one `OCR:` chat turn per page
+  against the served PaddleOCR-VL checkpoint, and the
+  `{model, pages:[{index, markdown, images, dimensions}], usage_info}` response. This is
+  the last route that kept the Python `mlx_api` on mini1. `PDFTOPPM_BIN` overrides the
+  rasteriser path for hosts whose launchd `PATH` is not a login shell's.
+
 ### Documented
 
 - `/v1/rerank` answers with **probabilities in `[0, 1]`**, the same contract `mlx_api`

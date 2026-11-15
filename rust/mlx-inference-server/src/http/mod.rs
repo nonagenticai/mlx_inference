@@ -11,6 +11,7 @@ pub mod capabilities;
 pub mod chat;
 pub mod health;
 pub mod models;
+pub mod ocr;
 pub mod stats;
 pub mod stream;
 pub mod tts_compat;
@@ -128,6 +129,11 @@ pub fn router(state: AppState) -> Router {
         .route("/v1/models/{*model_id}", get(models::get_model))
         .route("/v1/chat/completions", post(chat::create_chat_completion))
         .route("/v1/completions", post(chat::create_completion))
+        // The Mistral document-OCR surface `strata_ingest` speaks. It lives in
+        // the v1 group so it carries the same static API key and the same body
+        // budget as the image-bearing chat routes — a PDF posted as base64 is
+        // larger than axum's 2 MiB default.
+        .route("/v1/ocr", post(ocr::ocr))
         .route_layer(api_key_layer(ApiKey::from_config(&state.config)))
         // These handlers take the raw body as `Bytes`, which is subject to
         // axum's 2 MiB `DefaultBodyLimit`. A single 3 MB photo is ~4 MB of
