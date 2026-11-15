@@ -53,6 +53,18 @@ pub const MAX_SIDE_PX: u32 = 2000;
 /// The reference's per-page generation cap.
 pub const MAX_TOKENS: u32 = 2048;
 
+/// Breaks PaddleOCR-VL's repetition loop on pages that are nearly empty.
+///
+/// Measured 2026-11-15 on the deployed build (`mlx-community/PaddleOCR-VL-1.5-bf16`,
+/// greedy): the 3-page contract fixture carries one short line per page, and
+/// every page came back with that line twice — `"…alpha.\n\n…alpha."` — with the
+/// engine reporting `finish_reason=stop`. The engine's SSE showed both copies in
+/// `content`, so this is the model's own loop, not our delta handling. At 1.1
+/// each page returns the line once and a dense 12-line page is byte-identical
+/// (752 bytes, 12 lines, both settings); 1.05 was not enough. Upstream report:
+/// PaddlePaddle/PaddleOCR-VL discussion #73.
+pub const REPETITION_PENALTY: f32 = 1.1;
+
 /// Media types a document URL may return.
 pub const DOCUMENT_MEDIA_TYPES: [&str; 5] = [
     "application/pdf",
@@ -626,6 +638,7 @@ pub async fn ocr_page(app: &AppState, model: &str, data_url: &str) -> Result<Str
     let params = GenerateParams {
         max_tokens: Some(MAX_TOKENS),
         temperature: Some(0.0),
+        repetition_penalty: Some(REPETITION_PENALTY),
         ..GenerateParams::default()
     };
     let stream = app

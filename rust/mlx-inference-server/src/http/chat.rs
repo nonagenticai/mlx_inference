@@ -564,6 +564,7 @@ impl ChatRequest {
             top_p: self.top_p,
             top_k: self.top_k,
             min_p: self.min_p,
+            repetition_penalty: None,
             enable_thinking: self.enable_thinking,
             reasoning_effort: self.reasoning_effort.clone(),
             tools: self.tools.clone(),

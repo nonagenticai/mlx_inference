@@ -254,6 +254,44 @@ async fn generate_maps_sse_frames_and_synthesises_usage() {
 }
 
 #[tokio::test]
+async fn generate_forwards_a_repetition_penalty_and_omits_it_when_unset() {
+    let (base, captured) = spawn_peer(STREAM, StatusCode::OK, false).await;
+    let penalised = worker(base);
+    drain(
+        penalised
+            .generate(request(GenerateParams {
+                repetition_penalty: Some(1.1),
+                ..GenerateParams::default()
+            }))
+            .await
+            .expect("stream"),
+    )
+    .await;
+    let sent = captured.lock().expect("captured").clone().expect("body");
+    assert_eq!(
+        sent["repetition_penalty"]
+            .as_f64()
+            .map(|value| value as f32),
+        Some(1.1)
+    );
+
+    let (base, captured) = spawn_peer(STREAM, StatusCode::OK, false).await;
+    let plain = worker(base);
+    drain(
+        plain
+            .generate(request(GenerateParams::default()))
+            .await
+            .expect("stream"),
+    )
+    .await;
+    let sent = captured.lock().expect("captured").clone().expect("body");
+    assert!(
+        sent.get("repetition_penalty").is_none(),
+        "an unset penalty must not reach the engine: {sent}"
+    );
+}
+
+#[tokio::test]
 async fn a_tool_only_stream_forwards_every_fragment_in_order() {
     let (base, _captured) = spawn_peer(TOOL_STREAM, StatusCode::OK, false).await;
     let worker = worker(base);

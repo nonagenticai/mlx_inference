@@ -46,6 +46,11 @@ pub struct GenerateParams {
     pub max_tokens: Option<u32>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub temperature: Option<f64>,
+    /// Multiplier applied to tokens already in the recent window. `None` keeps
+    /// the engine default (1.0); OCR sets it to break PaddleOCR-VL's repetition
+    /// loop on near-empty pages.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub repetition_penalty: Option<f32>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub top_p: Option<f64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
