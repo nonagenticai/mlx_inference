@@ -1,0 +1,10 @@
+# Fingerprints of one dead licence token, committed by mistake in
+# tests/integration/conftest.py before that file was deleted (#27).
+#
+# The token was introspected against the live licences service on 2026-11-15 and
+# answered active:false, reason:"token_invalid". It is not a live credential, and
+# the history is public, so there is nothing left to rotate or un-publish.
+# Scoped to these three commits: any new licences token is still caught.
+201ca27527d5601796fd550c98206b95b7b2bd0f:tests/integration/conftest.py:nonagentic-licenses-token:14
+3afa33697016ffda2b254a32b0a50aad2af61c10:tests/integration/conftest.py:nonagentic-licenses-token:17
+25c48f292f0759e374a444b30a5ccf0e703e60e8:tests/integration/conftest.py:nonagentic-licenses-token:14
