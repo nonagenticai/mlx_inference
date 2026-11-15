@@ -466,7 +466,10 @@ async fn rasterised_page(
     // request does not fail over it.
     let long_side = width.max(height);
     if long_side > MAX_SIDE_PX {
-        let scaled = (RENDER_DPI * MAX_SIDE_PX / long_side).max(1);
+        // Round to nearest: floor() lands at 170 dpi / 1991 px where the
+        // reference renders 171 dpi / 2000 px, and the two services should put
+        // the same pixels in front of the same checkpoint.
+        let scaled = ((RENDER_DPI * MAX_SIDE_PX + long_side / 2) / long_side).max(1);
         let prefix = path.with_extension("scaled");
         let mut command = Command::new(pdftoppm);
         command
@@ -615,8 +618,14 @@ pub async fn ocr_page(app: &AppState, model: &str, data_url: &str) -> Result<Str
             {"type": "image_url", "image_url": {"url": data_url}},
         ],
     })];
+    // `temperature: 0.0` is not a style choice: the reference passes exactly
+    // this to `mlx_vlm.generate`, and at the engine default the same page
+    // produced different text on consecutive calls (measured 2026-11-15 on a
+    // three-page document: 643 / 362 / 361 characters for three identical
+    // pages, where the reference returned 658 every time).
     let params = GenerateParams {
         max_tokens: Some(MAX_TOKENS),
+        temperature: Some(0.0),
         ..GenerateParams::default()
     };
     let stream = app
