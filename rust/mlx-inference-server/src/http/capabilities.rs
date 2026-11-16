@@ -60,16 +60,12 @@ pub fn capability_routes(state: &AppState) -> Router {
             // The image route carries its own request shape (a diffused render is
             // minutes, not milliseconds) but the same 8 MiB body budget: the
             // request is a small JSON object and the answer can be megabytes.
+            // The legacy `/api/image/generate` dialect was RETIRED (#25): its only
+            // caller (the w2v provider) is gone, and the native route is the one
+            // API this host serves.
             Capability::Image => {
                 mounted += 1;
-                routes = routes
-                    .route("/v1/images/generations", post(image_generations))
-                    // The legacy `w2v` contract, mounted on the same capability:
-                    // a host that serves no image model has neither route.
-                    .route(
-                        "/api/image/generate",
-                        post(super::image_compat::generate_compat),
-                    );
+                routes = routes.route("/v1/images/generations", post(image_generations));
             }
             // Audio routes carry their own body budget: an upload for
             // transcription is tens of megabytes where an embedding batch is
@@ -307,15 +303,18 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn an_unserved_image_capability_mounts_neither_image_route() {
+    async fn an_unserved_image_capability_mounts_no_image_route() {
         let router = app(vec![Capability::Embedding], 200);
-        let (status, _) = status_of(router.clone(), "/v1/images/generations").await;
-        assert_eq!(status, 404);
+        let (status, _) = status_of(router, "/v1/images/generations").await;
+        assert_eq!(status, 404, "a route the engine cannot answer is absent");
+    }
+
+    /// The legacy `w2v` dialect is gone (#25) — present nowhere, served or not.
+    #[tokio::test]
+    async fn the_retired_legacy_image_route_is_absent_even_when_served() {
+        let router = app(vec![Capability::Image], 200);
         let (status, _) = status_of(router, "/api/image/generate").await;
-        assert_eq!(
-            status, 404,
-            "the legacy route rides the capability, not the build"
-        );
+        assert_eq!(status, 404, "the legacy dialect was retired in #25");
     }
 
     #[tokio::test]
