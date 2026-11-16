@@ -100,44 +100,74 @@ grep -rqF "$METAL_MARKER" "$SRC/src/lib/mlxcel-core/src/layers.rs" || {
   exit 1
 }
 
+# Two build shapes:
+#
+#   MLXCEL_PREBUILT_METALLIB=1 (default) — a host with only the Command Line
+#     Tools reuses the released `mlx.metallib` and stubs `xcrun metal`. Sound
+#     ONLY while the tree is pinned to the MLX revision that metallib was built
+#     from: MLX renamed every quantized kernel between 7ca40033 and 9f806b36
+#     (the `_hgs_0` suffix), so a newer tree asks the released metallib for
+#     kernels it does not carry and the first quantized op aborts. Deployed
+#     bf16 roles never notice; any quantized checkpoint does.
+#
+#   MLXCEL_PREBUILT_METALLIB=0 — a host with a real Metal toolchain compiles the
+#     kernels itself, which is the only shape that can serve quantized models
+#     and the one to use when Xcode is present.
+PREBUILT="${MLXCEL_PREBUILT_METALLIB:-1}"
+if [ "$PREBUILT" = "0" ]; then
+  xcrun -f metal >/dev/null 2>&1 || {
+    echo "MLXCEL_PREBUILT_METALLIB=0 needs a Metal compiler, and xcrun cannot find one." >&2
+    echo "  install Xcode (or its Metal Toolchain component) and select it:" >&2
+    echo "    sudo xcode-select -s /Applications/Xcode.app/Contents/Developer" >&2
+    echo "  a host without one must use the prebuilt-metallib shape (the default)." >&2
+    exit 1
+  }
+fi
+
 # The local prebuilt-metallib overlay. Idempotent: applied only when absent, and
 # `git apply --check` first so a drifted tree fails with the reason rather than
 # a half-applied patch.
 OVERLAY_FILE="$SRC/src/lib/mlxcelverse/overlays/metal/mlx/backend/metal/kernels/CMakeLists.txt"
-if [ ! -f "$OVERLAY_FILE" ] || ! grep -q 'MLXCEL_PREBUILT_METALLIB' "$OVERLAY_FILE"; then
-  echo "applying $(basename "$OVERLAY_PATCH") ..." >&2
-  git -C "$SRC" apply --check "$OVERLAY_PATCH" || {
-    echo "the local metallib overlay does not apply to $BUILT_REV" >&2
-    echo "re-author $OVERLAY_PATCH against this revision, or build on a host" >&2
-    echo "with full Xcode and unset MLXCEL_PREBUILT_METALLIB" >&2
+if [ "$PREBUILT" = "1" ]; then
+  if [ ! -f "$OVERLAY_FILE" ] || ! grep -q 'MLXCEL_PREBUILT_METALLIB' "$OVERLAY_FILE"; then
+    echo "applying $(basename "$OVERLAY_PATCH") ..." >&2
+    git -C "$SRC" apply --check "$OVERLAY_PATCH" || {
+      echo "the local metallib overlay does not apply to $BUILT_REV" >&2
+      echo "re-author $OVERLAY_PATCH against this revision, or build on a host" >&2
+      echo "with full Xcode and MLXCEL_PREBUILT_METALLIB=0" >&2
+      exit 1
+    }
+    git -C "$SRC" apply "$OVERLAY_PATCH"
+  fi
+  grep -q 'kernels/CMakeLists.txt' "$SRC/src/lib/mlxcelverse/CMakeLists.txt" \
+    || { echo "$SRC does not register the prebuilt-metallib overlay" >&2; exit 1; }
+
+  [ -f "$METALLIB" ] || {
+    echo "prebuilt metallib not found at $METALLIB" >&2
+    echo "install the matching artifact: brew install lablup/tap/mlxcel" >&2
+    echo "or build on a host with a Metal toolchain: MLXCEL_PREBUILT_METALLIB=0" >&2
     exit 1
   }
-  git -C "$SRC" apply "$OVERLAY_PATCH"
 fi
-grep -q 'kernels/CMakeLists.txt' "$SRC/src/lib/mlxcelverse/CMakeLists.txt" \
-  || { echo "$SRC does not register the prebuilt-metallib overlay" >&2; exit 1; }
 
-[ -f "$METALLIB" ] || {
-  echo "prebuilt metallib not found at $METALLIB" >&2
-  echo "install the matching artifact: brew install lablup/tap/mlxcel" >&2
-  exit 1
-}
-
-# Clang-based `xcrun metal` shim. MLX's make_compiled_preamble.sh only needs a
-# header-dependency scan and text expansion; kernel compilation is covered by
-# the metallib overlay. Stub headers satisfy the <metal_*> includes; their
-# paths carry "Xcode.app" so MLX's script filters them out of the generated
-# source, exactly as it does for the real SDK headers.
-SHIM="${TMPDIR:-/tmp}/mlxcel-metal-shim"
-mkdir -p "$SHIM/Xcode.app/usr/include"
-for h in metal_stdlib metal_math metal_integer metal_common metal_compute \
-  metal_geometric metal_relational metal_pack metal_atomic metal_texture \
-  metal_simdgroup metal_simdgroup_matrix metal_matrix metal_types \
-  metal_extended_vector metal_uninitialized metal_resource metal_limits \
-  metal_numeric metal_barrier metal_copy metal_depth metal_dispatch; do
-  : >"$SHIM/Xcode.app/usr/include/$h"
-done
-cat >"$SHIM/xcrun" <<'EOF'
+# Clang-based `xcrun metal` shim — prebuilt-metallib shape only. MLX's
+# make_compiled_preamble.sh only needs a header-dependency scan and text
+# expansion there; kernel compilation is covered by the metallib overlay. Stub
+# headers satisfy the <metal_*> includes; their paths carry "Xcode.app" so MLX's
+# script filters them out of the generated source, exactly as it does for the
+# real SDK headers.
+SHIM=""
+if [ "$PREBUILT" = "1" ]; then
+  SHIM="${TMPDIR:-/tmp}/mlxcel-metal-shim"
+  mkdir -p "$SHIM/Xcode.app/usr/include"
+  for h in metal_stdlib metal_math metal_integer metal_common metal_compute \
+    metal_geometric metal_relational metal_pack metal_atomic metal_texture \
+    metal_simdgroup metal_simdgroup_matrix metal_matrix metal_types \
+    metal_extended_vector metal_uninitialized metal_resource metal_limits \
+    metal_numeric metal_barrier metal_copy metal_depth metal_dispatch; do
+    : >"$SHIM/Xcode.app/usr/include/$h"
+  done
+  cat >"$SHIM/xcrun" <<'EOF'
 #!/bin/bash
 if [ "$1" = "-sdk" ] && [ "$2" = "macosx" ] && [ "$3" = "metal" ]; then
   shift 3
@@ -153,7 +183,8 @@ if [ "$1" = "-sdk" ] && [ "$2" = "macosx" ] && [ "$3" = "metal" ]; then
 fi
 exec /usr/bin/xcrun "$@"
 EOF
-chmod +x "$SHIM/xcrun"
+  chmod +x "$SHIM/xcrun"
+fi
 
 echo "building mlxcel $BUILT_REV in $SRC (this takes tens of minutes)..." >&2
 # The estate rule is that every repo on this box builds through cargo-guard, so
@@ -162,9 +193,16 @@ GUARD="${CARGO_GUARD:-$HOME/.claude/scripts/cargo-guard.py}"
 [ -x "$GUARD" ] || { echo "cargo-guard not found at $GUARD" >&2; exit 1; }
 (
   cd "$SRC"
-  PATH="$SHIM:$PATH" MACOSX_DEPLOYMENT_TARGET=14.0 \
-    RUSTFLAGS="-C target-cpu=apple-m1" \
-    "$GUARD" build --release --features metal,accelerate
+  if [ "$PREBUILT" = "1" ]; then
+    PATH="$SHIM:$PATH" MACOSX_DEPLOYMENT_TARGET=14.0 \
+      RUSTFLAGS="-C target-cpu=apple-m1" \
+      "$GUARD" build --release --features metal,accelerate
+  else
+    # A real Metal toolchain: let MLX compile and package its own kernels.
+    MACOSX_DEPLOYMENT_TARGET=14.0 \
+      RUSTFLAGS="-C target-cpu=apple-m1" \
+      "$GUARD" build --release --features metal,accelerate
+  fi
 ) >&2
 
 # ⚠️ Resolved INSIDE $SRC. cargo-guard derives the shared target directory from
@@ -180,8 +218,21 @@ TARGET="$(cd "$SRC" && "$GUARD" --print-target)/release"
 
 mkdir -p "$DEST"
 install -m 755 "$TARGET/mlxcel-server" "$DEST/mlxcel-server"
-# MLX's Metal loader searches the binary's directory first; keep them together.
-install -m 644 "$METALLIB" "$DEST/mlx.metallib"
+# MLX's Metal loader searches the binary's directory first; keep the kernels
+# together with it. In the prebuilt shape that file is the released artefact; in
+# the self-compiled shape it is whatever MLX just built, so find the newest one
+# in the build tree rather than assuming a path.
+if [ "$PREBUILT" = "1" ]; then
+  install -m 644 "$METALLIB" "$DEST/mlx.metallib"
+else
+  BUILT_METALLIB="$(find "$TARGET" -name 'mlx.metallib' -type f -newer "$TARGET/mlxcel-server" -print 2>/dev/null | head -1)"
+  [ -n "$BUILT_METALLIB" ] || BUILT_METALLIB="$(find "$TARGET" -name 'mlx.metallib' -type f -print 2>/dev/null | head -1)"
+  [ -n "$BUILT_METALLIB" ] || {
+    echo "the self-compiled build produced no mlx.metallib under $TARGET" >&2
+    exit 1
+  }
+  install -m 644 "$BUILT_METALLIB" "$DEST/mlx.metallib"
+fi
 
 # Record what was built. The binary itself reports only the crate version, so
 # this file is the only durable link between a deployed engine and its source.

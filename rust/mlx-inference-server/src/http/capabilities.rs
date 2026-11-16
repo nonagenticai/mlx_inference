@@ -57,6 +57,20 @@ pub fn capability_routes(state: &AppState) -> Router {
                 mounted += 1;
                 routes = routes.route("/v1/rerank", post(rerank));
             }
+            // The image route carries its own request shape (a diffused render is
+            // minutes, not milliseconds) but the same 8 MiB body budget: the
+            // request is a small JSON object and the answer can be megabytes.
+            Capability::Image => {
+                mounted += 1;
+                routes = routes
+                    .route("/v1/images/generations", post(image_generations))
+                    // The legacy `w2v` contract, mounted on the same capability:
+                    // a host that serves no image model has neither route.
+                    .route(
+                        "/api/image/generate",
+                        post(super::image_compat::generate_compat),
+                    );
+            }
             // Audio routes carry their own body budget: an upload for
             // transcription is tens of megabytes where an embedding batch is
             // not, and a shared limit would size both to the larger one.
@@ -109,6 +123,20 @@ pub async fn embeddings(State(app): State<AppState>, headers: HeaderMap, body: B
 /// service, and callers move to this path instead.
 pub async fn rerank(State(app): State<AppState>, headers: HeaderMap, body: Bytes) -> Response {
     forward(app, Capability::Rerank, headers, body).await
+}
+
+/// `POST /v1/images/generations` — forwarded to the engine.
+///
+/// The engine owns this schema too: `prompt`, `size`/`width`/`height`, `steps`,
+/// `seed`, `guidance`, `negative_prompt`, `n`, and `b64_json` responses. Nothing
+/// is re-modelled here, so a capability the engine gains later reaches callers
+/// without a change on this side.
+pub async fn image_generations(
+    State(app): State<AppState>,
+    headers: HeaderMap,
+    body: Bytes,
+) -> Response {
+    forward(app, Capability::Image, headers, body).await
 }
 
 async fn forward(
@@ -276,6 +304,25 @@ mod tests {
         let router = app(vec![Capability::Embedding], 200);
         let (status, _) = status_of(router, "/v1/rerank").await;
         assert_eq!(status, 404, "a route the engine cannot answer is absent");
+    }
+
+    #[tokio::test]
+    async fn an_unserved_image_capability_mounts_neither_image_route() {
+        let router = app(vec![Capability::Embedding], 200);
+        let (status, _) = status_of(router.clone(), "/v1/images/generations").await;
+        assert_eq!(status, 404);
+        let (status, _) = status_of(router, "/api/image/generate").await;
+        assert_eq!(
+            status, 404,
+            "the legacy route rides the capability, not the build"
+        );
+    }
+
+    #[tokio::test]
+    async fn an_enabled_image_capability_forwards_the_openai_route() {
+        let router = app(vec![Capability::Image], 200);
+        let (status, _) = status_of(router, "/v1/images/generations").await;
+        assert_eq!(status, 200);
     }
 
     /// A worker that answers every speech request with silence and counts calls,

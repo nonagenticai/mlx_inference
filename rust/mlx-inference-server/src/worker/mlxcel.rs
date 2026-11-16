@@ -56,6 +56,19 @@ pub const MAX_PORT_CONFLICTS: u32 = 30;
 /// free the connection rather than pin it until the client gives up.
 pub const FORWARD_TIMEOUT: Duration = Duration::from_secs(120);
 
+/// How long a forwarded capability may take on this configuration.
+///
+/// An image generation is a diffusion run plus three checkpoint loads, so a host
+/// that serves one sets its own budget (`MLXCEL_IMAGE_TIMEOUT_SECS`); everything
+/// else is seconds and keeps the tighter one, which is what frees a hung
+/// connection instead of pinning it.
+fn forward_timeout_for(capability: Capability, image_timeout: Duration) -> Duration {
+    match capability {
+        Capability::Image => image_timeout,
+        _ => FORWARD_TIMEOUT,
+    }
+}
+
 /// Drop the JSON `model` field before forwarding a capability request.
 ///
 /// A process serves at most one checkpoint per capability, and the engine
@@ -96,12 +109,21 @@ pub struct MlxcelConfig {
     /// Sidecar executable (`mlxcel-server`).
     pub bin: PathBuf,
     /// Checkpoint directory or repo id passed to `-m`.
-    pub model_path: String,
+    ///
+    /// `None` on an image-only host: `mlxcel-server --image-model` alone starts
+    /// without a chat model, and passing `-m` there would load a second, unused
+    /// checkpoint into a 16 GiB box.
+    pub model_path: Option<String>,
     /// Checkpoint served on `/v1/embeddings` next to the chat model, as
     /// `--embedding-model`. Unset means no embedding route.
     pub embedding_model: Option<String>,
     /// Checkpoint served on `/v1/rerank`, as `--reranker-model`.
     pub reranker_model: Option<String>,
+    /// Checkpoint served on `/v1/images/generations`, as `--image-model`.
+    /// Unset means no image route.
+    pub image_model: Option<String>,
+    /// Per-request budget for a forwarded image generation.
+    pub image_timeout: Duration,
     /// Capabilities this host serves. The HTTP layer mounts exactly these.
     pub capabilities: Vec<Capability>,
     /// The id this server exposes in `/v1/models` and accepts from clients.
@@ -117,20 +139,40 @@ pub struct MlxcelConfig {
 impl MlxcelConfig {
     /// Derive the engine configuration from the server config.
     pub fn from_config(config: &Config) -> Result<Self, WorkerError> {
-        let model_id = config
-            .default_model
-            .clone()
-            .or_else(|| config.models.first().cloned())
-            .ok_or_else(|| {
-                WorkerError::Unavailable(
-                    "ENGINE=mlxcel needs MODELS or DEFAULT_MODEL to name the served model"
-                        .to_owned(),
-                )
-            })?;
-        let model_path = config
-            .mlxcel_model
-            .clone()
-            .unwrap_or_else(|| model_id.clone());
+        // An image-only host is the one shape with no chat checkpoint: the
+        // engine's own `--image-model`-without-`-m` mode (#2825). Every other
+        // shape still needs a model id to serve and to pin on the wire.
+        let image_only = !config.mlxcel_capabilities.is_empty()
+            && config
+                .mlxcel_capabilities
+                .iter()
+                .all(|capability| *capability == Capability::Image);
+        let model_id = if image_only {
+            config.mlxcel_image_model.clone().ok_or_else(|| {
+                WorkerError::Unavailable("image needs MLXCEL_IMAGE_MODEL".to_owned())
+            })?
+        } else {
+            config
+                .default_model
+                .clone()
+                .or_else(|| config.models.first().cloned())
+                .ok_or_else(|| {
+                    WorkerError::Unavailable(
+                        "ENGINE=mlxcel needs MODELS or DEFAULT_MODEL to name the served model"
+                            .to_owned(),
+                    )
+                })?
+        };
+        let model_path = if image_only {
+            None
+        } else {
+            Some(
+                config
+                    .mlxcel_model
+                    .clone()
+                    .unwrap_or_else(|| model_id.clone()),
+            )
+        };
         Ok(Self {
             base_url: config.mlxcel_base_url(),
             api_key: config.mlxcel_api_key.clone(),
@@ -138,6 +180,8 @@ impl MlxcelConfig {
             model_path,
             embedding_model: config.mlxcel_embedding_model.clone(),
             reranker_model: config.mlxcel_reranker_model.clone(),
+            image_model: config.mlxcel_image_model.clone(),
+            image_timeout: config.mlxcel_image_timeout,
             capabilities: config.mlxcel_capabilities.clone(),
             model_id,
             port: config.mlxcel_port,
@@ -152,9 +196,11 @@ impl MlxcelConfig {
             base_url: base_url.into(),
             api_key: None,
             bin: PathBuf::from("mlxcel-server"),
-            model_path: "test-model".to_owned(),
+            model_path: Some("test-model".to_owned()),
             embedding_model: None,
             reranker_model: None,
+            image_model: None,
+            image_timeout: crate::config::DEFAULT_IMAGE_TIMEOUT,
             capabilities: vec![Capability::Chat],
             model_id: model_id.into(),
             port: 0,
@@ -299,7 +345,8 @@ impl MlxcelWorker {
                 tracing::info!(
                     bin = %worker.cfg.bin.display(),
                     port = worker.cfg.port,
-                    model = %worker.cfg.model_path,
+                    model = worker.cfg.model_path.as_deref().unwrap_or(""),
+                    image_model = worker.cfg.image_model.as_deref().unwrap_or(""),
                     "mlxcel sidecar starting"
                 );
 
@@ -357,9 +404,12 @@ impl MlxcelWorker {
         let max_payload = MAX_IMAGE_PAYLOAD_BYTES.to_string();
         let max_images = MAX_IMAGES.to_string();
         let mut command = Command::new(&self.cfg.bin);
+        // Image-only hosts pass no `-m`: the engine then serves the image route
+        // and nothing else (#2825).
+        if let Some(model_path) = &self.cfg.model_path {
+            command.arg("-m").arg(model_path);
+        }
         command
-            .arg("-m")
-            .arg(&self.cfg.model_path)
             .arg("--host")
             .arg("127.0.0.1")
             .arg("--port")
@@ -396,6 +446,12 @@ impl MlxcelWorker {
         }
         if let Some(model) = &self.cfg.reranker_model {
             command.arg("--reranker-model").arg(model);
+        }
+        // The image checkpoint. Present on an image-only host *instead of* `-m`,
+        // and on a mixed host beside it; either way the engine mounts
+        // `/v1/images/generations` for it and no route is invented here.
+        if let Some(model) = &self.cfg.image_model {
+            command.arg("--image-model").arg(model);
         }
         command.spawn().map_err(|err| {
             WorkerError::Unavailable(format!("failed to spawn {}: {err}", self.cfg.bin.display()))
@@ -520,7 +576,7 @@ impl Worker for MlxcelWorker {
             .client
             .post(format!("{}{}", self.cfg.base_url, capability.engine_path()))
             .body(body)
-            .timeout(FORWARD_TIMEOUT);
+            .timeout(forward_timeout_for(capability, self.cfg.image_timeout));
         if let Some(content_type) = request.content_type {
             builder = builder.header(reqwest::header::CONTENT_TYPE, content_type);
         }
@@ -1110,6 +1166,35 @@ fn lifetime_peak_gib(_pid: u32) -> Option<f64> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn config_with(pairs: &[(&str, &str)]) -> crate::config::Config {
+        let env: std::collections::HashMap<String, String> = pairs
+            .iter()
+            .map(|(key, value)| ((*key).to_owned(), (*value).to_owned()))
+            .collect();
+        crate::config::Config::from_env(&env).expect("config parses")
+    }
+
+    #[test]
+    fn an_image_only_host_passes_no_chat_checkpoint() {
+        let cfg = MlxcelConfig::from_config(&config_with(&[
+            ("MLXCEL_CAPABILITIES", "image"),
+            ("MLXCEL_IMAGE_MODEL", "/models/moss-compact"),
+        ]))
+        .expect("mlxcel config");
+        assert_eq!(cfg.model_path, None, "image-only means no `-m`");
+        assert_eq!(cfg.image_model.as_deref(), Some("/models/moss-compact"));
+        assert_eq!(cfg.model_id, "/models/moss-compact");
+        assert_eq!(cfg.capabilities, vec![Capability::Image]);
+    }
+
+    #[test]
+    fn a_chat_host_still_carries_its_model_path() {
+        let cfg = MlxcelConfig::from_config(&config_with(&[("MODELS", "mlx-community/Qwen3-4B")]))
+            .expect("mlxcel config");
+        assert_eq!(cfg.model_path.as_deref(), Some("mlx-community/Qwen3-4B"));
+        assert_eq!(cfg.image_model, None);
+    }
 
     #[cfg(target_os = "macos")]
     #[test]

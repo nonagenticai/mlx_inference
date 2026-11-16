@@ -27,6 +27,14 @@ pub const DEFAULT_MLXCEL_PORT: u16 = 8996;
 pub const DEFAULT_MLXCEL_BIN: &str = "mlxcel-server";
 /// Model loading dominates startup; 22.8 GB takes ~10 s warm, minutes cold.
 pub const DEFAULT_MLXCEL_READY_TIMEOUT: Duration = Duration::from_secs(300);
+/// Default per-request budget for a forwarded image generation.
+///
+/// Diffusion is not an embedding: a MOSS-Image render loads the text encoder,
+/// drops it, loads the transformer, denoises at up to 50 steps and decodes. The
+/// engine's own image worker defaults to 900 s for the same reason; this sits
+/// under that, above any real render, and well above the 120 s the other
+/// capabilities use.
+pub const DEFAULT_IMAGE_TIMEOUT: Duration = Duration::from_secs(600);
 
 /// Only RS256 is supported, matching `config.Settings.JWT_ALGORITHM`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -85,6 +93,12 @@ pub struct Config {
     /// `MLXCEL_RERANKER_MODEL`: checkpoint served on `/v1/rerank`, as
     /// `--reranker-model`.
     pub mlxcel_reranker_model: Option<String>,
+    /// `MLXCEL_IMAGE_MODEL`: checkpoint served on `/v1/images/generations`, as
+    /// `--image-model`. An image-only host passes no `-m` at all.
+    pub mlxcel_image_model: Option<String>,
+    /// `MLXCEL_IMAGE_TIMEOUT_SECS`: per-request budget for a forwarded image
+    /// generation, which is minutes where the other capabilities are seconds.
+    pub mlxcel_image_timeout: Duration,
     /// `MLXCEL_CAPABILITIES`: which capabilities this host serves. Defaults to
     /// chat plus every capability whose checkpoint is set, so a device that only
     /// names an embedding model does not mount a chat route it cannot answer.
@@ -158,11 +172,27 @@ impl Config {
         let mlxcel_embedding_model =
             raw_non_empty(env, "MLXCEL_EMBEDDING_MODEL").map(str::to_owned);
         let mlxcel_reranker_model = raw_non_empty(env, "MLXCEL_RERANKER_MODEL").map(str::to_owned);
+        let mlxcel_image_model = raw_non_empty(env, "MLXCEL_IMAGE_MODEL").map(str::to_owned);
+        let mlxcel_image_timeout = match raw_non_empty(env, "MLXCEL_IMAGE_TIMEOUT_SECS") {
+            Some(raw) => Duration::from_secs(
+                raw.parse::<u64>()
+                    .map_err(|_| ConfigError::InvalidMlxcelTimeout(raw.to_owned()))?,
+            ),
+            None => DEFAULT_IMAGE_TIMEOUT,
+        };
         let mlxcel_capabilities = parse_capabilities(
             raw_non_empty(env, "MLXCEL_CAPABILITIES"),
             mlxcel_embedding_model.is_some(),
             mlxcel_reranker_model.is_some(),
         )?;
+        // A host that advertises image without a checkpoint would mount a route
+        // whose engine spawn has no `--image-model`, and the engine would start
+        // in image-only mode with nothing to load. Refuse at parse time.
+        if mlxcel_capabilities.contains(&Capability::Image) && mlxcel_image_model.is_none() {
+            return Err(ConfigError::InvalidCapability(
+                "image needs MLXCEL_IMAGE_MODEL".to_owned(),
+            ));
+        }
 
         Ok(Self {
             port,
@@ -190,6 +220,8 @@ impl Config {
             mlxcel_model: raw_non_empty(env, "MLXCEL_MODEL").map(str::to_owned),
             mlxcel_embedding_model,
             mlxcel_reranker_model,
+            mlxcel_image_model,
+            mlxcel_image_timeout,
             mlxcel_capabilities,
             mlxcel_port,
             mlxcel_api_key: raw_non_empty(env, "MLXCEL_API_KEY").map(|raw| raw.trim().to_owned()),
@@ -305,6 +337,11 @@ fn split_list(raw: &str) -> Vec<String> {
 /// the *primary* checkpoint rather than beside the chat model, so a host that
 /// lists `speech` or `transcription` is a host whose `MLXCEL_MODEL` names that
 /// audio checkpoint. There is no default that could pick it for you.
+///
+/// `image` is opt-in for the same reason and one more: `mlxcel-server
+/// --image-model` on its own starts in image-only mode, with no `-m` and no chat
+/// route. Inferring it from a checkpoint would silently turn a chat host into a
+/// different shape than the one its operator wrote down.
 fn parse_capabilities(
     raw: Option<&str>,
     has_embedding: bool,
@@ -346,6 +383,45 @@ mod tests {
             .iter()
             .map(|(k, v)| ((*k).to_owned(), (*v).to_owned()))
             .collect()
+    }
+
+    #[test]
+    fn image_is_opt_in_and_needs_a_checkpoint() {
+        // A checkpoint alone does not advertise the route: the operator writes
+        // the capability down, the same way audio works.
+        let cfg = Config::from_env(&env(&[("MLXCEL_IMAGE_MODEL", "/models/moss")]))
+            .expect("config parses");
+        assert!(!cfg.mlxcel_capabilities.contains(&Capability::Image));
+        assert_eq!(
+            Config::from_env(&env(&[("MLXCEL_CAPABILITIES", "image")])).unwrap_err(),
+            ConfigError::InvalidCapability("image needs MLXCEL_IMAGE_MODEL".to_owned())
+        );
+        let cfg = Config::from_env(&env(&[
+            ("MLXCEL_CAPABILITIES", "image"),
+            ("MLXCEL_IMAGE_MODEL", "/models/moss"),
+        ]))
+        .expect("config parses");
+        assert_eq!(cfg.mlxcel_capabilities, vec![Capability::Image]);
+        assert_eq!(cfg.mlxcel_image_timeout, DEFAULT_IMAGE_TIMEOUT);
+    }
+
+    #[test]
+    fn the_image_timeout_is_configurable_and_validated() {
+        let cfg = Config::from_env(&env(&[
+            ("MLXCEL_CAPABILITIES", "image"),
+            ("MLXCEL_IMAGE_MODEL", "/models/moss"),
+            ("MLXCEL_IMAGE_TIMEOUT_SECS", "900"),
+        ]))
+        .expect("config parses");
+        assert_eq!(cfg.mlxcel_image_timeout, Duration::from_secs(900));
+        assert!(
+            Config::from_env(&env(&[
+                ("MLXCEL_CAPABILITIES", "image"),
+                ("MLXCEL_IMAGE_MODEL", "/models/moss"),
+                ("MLXCEL_IMAGE_TIMEOUT_SECS", "soon"),
+            ]))
+            .is_err()
+        );
     }
 
     #[test]

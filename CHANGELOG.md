@@ -8,6 +8,16 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- `Capability::Image` and `POST /v1/images/generations`, forwarded unchanged to the engine,
+  plus `POST /api/image/generate` — the legacy `w2v` dialect (`prompt`, `width`, `height`,
+  `steps`, `guidance`, `seed`, `negative_prompt` → `image_base64`) that the Python/mflux
+  service on mini1:9204 serves today. Two translations are deliberate: a step count below 8
+  is a distilled-model ask (FLUX-schnell defaults to 4) and is replaced by the flow model's
+  default, and `guidance <= 1.0` means "no CFG" and is replaced the same way; both are sent
+  explicitly so the value echoed back is the one the engine ran. An image-only host passes
+  `--image-model` and **no** `-m` (the engine's image-only mode), and its forward budget is
+  `MLXCEL_IMAGE_TIMEOUT_SECS` (600 s default) instead of the 120 s the other capabilities
+  keep.
 - `POST /v1/ocr`, the Mistral document-OCR contract `strata_ingest` speaks: a
   `document_url`/`image_url` (base64 `data:` URI or guarded HTTP fetch), PDFs rasterised
   page by page with `pdftoppm` at the reference's 200 dpi, one `OCR:` chat turn per page

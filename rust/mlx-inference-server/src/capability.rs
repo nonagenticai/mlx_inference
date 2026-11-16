@@ -12,24 +12,26 @@ use std::fmt;
 
 /// One engine capability.
 ///
-/// The variants are the four inference surfaces the engine exposes besides chat;
-/// `Chat` stays here so that a device serving no chat model (a reranker-only or
-/// TTS-only host) can say so explicitly rather than by omission.
+/// The variants are the five inference surfaces the engine exposes besides chat;
+/// `Chat` stays here so that a device serving no chat model (a reranker-only,
+/// TTS-only or image-only host) can say so explicitly rather than by omission.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Capability {
     Chat,
     Embedding,
     Rerank,
+    Image,
     Speech,
     Transcription,
 }
 
 impl Capability {
     /// Every capability, in the order `/health` reports them.
-    pub const ALL: [Capability; 5] = [
+    pub const ALL: [Capability; 6] = [
         Capability::Chat,
         Capability::Embedding,
         Capability::Rerank,
+        Capability::Image,
         Capability::Speech,
         Capability::Transcription,
     ];
@@ -40,6 +42,7 @@ impl Capability {
             Capability::Chat => "chat",
             Capability::Embedding => "embedding",
             Capability::Rerank => "rerank",
+            Capability::Image => "image",
             Capability::Speech => "speech",
             Capability::Transcription => "transcription",
         }
@@ -55,6 +58,7 @@ impl Capability {
             Capability::Chat => "/v1/chat/completions",
             Capability::Embedding => "/v1/embeddings",
             Capability::Rerank => "/v1/rerank",
+            Capability::Image => "/v1/images/generations",
             Capability::Speech => "/v1/audio/speech",
             Capability::Transcription => "/v1/audio/transcriptions",
         }
@@ -66,6 +70,7 @@ impl Capability {
             "chat" => Some(Capability::Chat),
             "embedding" | "embeddings" => Some(Capability::Embedding),
             "rerank" | "reranking" => Some(Capability::Rerank),
+            "image" | "images" => Some(Capability::Image),
             "speech" | "tts" => Some(Capability::Speech),
             "transcription" | "transcribe" | "asr" => Some(Capability::Transcription),
             _ => None,
@@ -112,5 +117,14 @@ mod tests {
                 cap
             );
         }
+    }
+
+    #[test]
+    fn image_is_spelled_both_ways_and_keeps_the_engine_path() {
+        assert_eq!(Capability::parse("image"), Some(Capability::Image));
+        assert_eq!(Capability::parse("Images"), Some(Capability::Image));
+        assert_eq!(Capability::Image.engine_path(), "/v1/images/generations");
+        // The engine owns the model on this path: the server never rewrites it.
+        assert!(!Capability::Image.takes_json_model());
     }
 }
