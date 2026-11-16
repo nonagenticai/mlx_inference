@@ -51,9 +51,16 @@ pub const DEFAULT_SIDE: u32 = 512;
 pub const MAX_SIDE: u32 = 2048;
 /// Below this, a step count is a distilled-model ask rather than a choice.
 pub const DISTILLED_STEP_CEILING: u32 = 8;
-/// Steps a flow model runs when the caller asked for a distilled-model count.
-/// Mirrors mlxcel's `moss_image::config::GENERATE_DEFAULTS`.
-pub const ENGINE_DEFAULT_STEPS: u32 = 50;
+/// Steps used when the caller asked for a distilled-model count.
+///
+/// The model's own default is 50 (mlxcel's `moss_image::config::GENERATE_DEFAULTS`),
+/// but this caller posts with a **180 s** client timeout, measured against the
+/// FLUX service this route replaces. On mini1 a MOSS render costs ~8.2 s per
+/// step at 512x512 with CFG (415 s for 50 steps, 103 s for 12), so 50 does not
+/// fit and 12 does — with the text in the image still legible, which is the
+/// reason for this model. A caller that wants the full schedule asks for it
+/// through `/v1/images/generations`, where the engine default still applies.
+pub const ENGINE_DEFAULT_STEPS: u32 = 12;
 /// At or below this, `guidance` means "no CFG" rather than a real value.
 pub const NO_CFG_GUIDANCE: f32 = 1.0;
 /// Guidance used when the caller meant "no CFG". Mirrors the same defaults.
