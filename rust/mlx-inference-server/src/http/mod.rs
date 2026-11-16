@@ -10,7 +10,6 @@ pub mod audio;
 pub mod capabilities;
 pub mod chat;
 pub mod health;
-pub mod image_compat;
 pub mod models;
 pub mod ocr;
 pub mod stats;
