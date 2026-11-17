@@ -27,11 +27,23 @@ jobs:
     steps:
       - uses: actions/checkout@v6.0.2
 
+      # The toolchain action needs its own copy of the version, and that copy silently
+      # drifted from `rust-toolchain.toml` (it still said 1.99.1 while the pin said 1.100.0,
+      # so `cargo fmt` auto-installed the pinned one WITHOUT components and failed). Keep them
+      # equal, and assert it on every run so the next drift is loud instead of mysterious.
       - name: Install the pinned toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: "1.99.1"
+          toolchain: "1.100.0"
           components: rustfmt, clippy
+
+      - name: Assert the CI toolchain matches rust-toolchain.toml
+        run: |
+          set -euo pipefail
+          want=$(sed -n 's/^channel = "\(.*\)"/\1/p' rust-toolchain.toml)
+          got=$(rustc --version | awk '{print $2}')
+          echo "pin=$want ci=$got"
+          [ "$want" = "$got" ] || { echo "::error::CI toolchain $got != pin $want"; exit 1; }
 
       - name: Format
         working-directory: rust
