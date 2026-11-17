@@ -19,6 +19,18 @@ permissions:
   contents: read
 
 jobs:
+  # The public-tree rule, second half: betterleaks catches credentials, this catches the
+  # identifiers around them — internal hostnames, tailnet/CGNAT addresses and private
+  # repository paths. mlx_inference was the one public repo in the estate without it.
+  # Allowlist and its justifications: `.ci/private-refs.allow`.
+  no-private-refs:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6.0.2
+      - name: scan tracked files
+        run: bash scripts/ci/no-private-refs.sh
+
   rust:
     runs-on: ubuntu-latest
     timeout-minutes: 30
