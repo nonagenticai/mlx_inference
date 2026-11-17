@@ -1,0 +1,13 @@
+# Allowlist for scripts/ci/no-private-refs.sh — a security decision, not a convenience.
+#
+# One rule per line, `path/glob:pattern  # justification`. The glob matches the repo-relative
+# path; the pattern is an ERE matched against the whole `git grep` hit (`path:line:text`).
+#
+# ⛔ Do NOT add an entry to keep a real internal hostname, address or private repository path in
+# a public tree. These four are the OPPOSITE of that: they are CGNAT documentation and unit-test
+# fixtures for the media gateway's URL guard, chosen precisely because CGNAT is a range we block.
+# 100.64.0.0/10 is Tailscale's address space, which is why the guard flags it; these values name
+# no host, and the file that carries them exists to REJECT such URLs.
+rust/mlx-inference-server/src/media_gateway.rs:100\.64\.0\.      # CGNAT range in the guard's doc comment + test
+rust/mlx-inference-server/src/media_gateway.rs:100\.127\.255\.255  # CGNAT upper-bound fixture
+rust/mlx-inference-server/tests/media_gateway.rs:100\.64\.0\.1      # CGNAT fixture the guard must reject
