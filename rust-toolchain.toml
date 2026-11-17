@@ -2,6 +2,6 @@
 # (`.github/workflows/tests.yml` `toolchain`). Pin it locally too, so every
 # host and every worktree compiles the release the service ships on.
 [toolchain]
-channel = "1.99.1"
+channel = "1.100.0"
 components = ["rustfmt", "clippy"]
 profile = "minimal"
