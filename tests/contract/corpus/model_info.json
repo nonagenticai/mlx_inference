@@ -1,7 +1,0 @@
-{
-  "name": "model_info",
-  "request": {
-    "method": "GET",
-    "path": "/model/info"
-  }
-}

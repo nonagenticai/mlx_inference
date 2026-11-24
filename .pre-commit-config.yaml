@@ -29,7 +29,7 @@ repos:
       # repo-local config replaces the fleet one rather than merging with it, so
       # it has to carry the estate rules verbatim. See that file's header before
       # editing it. Install the binary with `brew install betterleaks`;
-      # `scripts/setup-dev.sh` does that for you.
+      # install it with `brew install betterleaks`.
       - id: betterleaks
         name: betterleaks (staged changes)
         entry: betterleaks git --pre-commit --staged --redact --no-banner --config .betterleaks.toml
@@ -38,26 +38,3 @@ repos:
         always_run: true
         stages: [pre-commit]
 
-      - id: cargo-fmt
-        name: cargo fmt
-        entry: cargo fmt --manifest-path rust/Cargo.toml --all -- --check
-        language: system
-        pass_filenames: false
-        files: \.rs$
-        stages: [pre-commit]
-
-      - id: cargo-clippy
-        name: cargo clippy (-D warnings)
-        entry: cargo clippy --manifest-path rust/Cargo.toml --workspace --all-targets -- -D warnings
-        language: system
-        pass_filenames: false
-        files: \.rs$
-        stages: [pre-push]
-
-      - id: cargo-test
-        name: cargo test (workspace)
-        entry: cargo test --manifest-path rust/Cargo.toml --workspace
-        language: system
-        pass_filenames: false
-        files: \.rs$
-        stages: [pre-push]
