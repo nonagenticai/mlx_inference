@@ -8,6 +8,6 @@
 # fixtures for the media gateway's URL guard, chosen precisely because CGNAT is a range we block.
 # 100.64.0.0/10 is Tailscale's address space, which is why the guard flags it; these values name
 # no host, and the file that carries them exists to REJECT such URLs.
-rust/mlx-inference-server/src/media_gateway.rs:100\.64\.0\.      # CGNAT range in the guard's doc comment + test
-rust/mlx-inference-server/src/media_gateway.rs:100\.127\.255\.255  # CGNAT upper-bound fixture
-rust/mlx-inference-server/tests/media_gateway.rs:100\.64\.0\.1      # CGNAT fixture the guard must reject
+
+# The Rust server's CGNAT fixtures (media_gateway.rs) moved with it to
+# nonagenticai/mlx-inference-server; that repo carries the same allowlist.
